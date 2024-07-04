@@ -851,7 +851,7 @@ namespace Ecom.API.Services
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.InnerException.ToString())
+                Console.WriteLine(ex.InnerException.ToString());
             }
 
 
