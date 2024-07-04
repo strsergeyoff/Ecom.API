@@ -800,44 +800,52 @@ namespace Ecom.API.Services
         private async Task<List<ReportDetail>> FetchReportDetailsFromApi(rise_project store, DateTime? lastDate)
         {
             string date = lastDate is null ? $"?dateFrom=2024-01-29&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}"
-                : $"?dateFrom={lastDate.Value.AddDays(1).ToString("yyyy-MM-dd")}&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
+                : $"?dateFrom={lastDate.Value.AddSeconds(1).ToString("yyyy-MM-dd")}&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
 
             List<ReportDetail> reportDetails = new List<ReportDetail>();
 
-            try
+            bool IsNext = true;
+
+            do
             {
-                var apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod{date}";
+                    var apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod{date}";
 
 
-                using (var httpClient = new HttpClient())
-                {
-                    var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                    requestMessage.Headers.Add("contentType", "application/json");
-                    requestMessage.Headers.Add("Authorization", store.Token);
-
-                    HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
-
-                    if (response.IsSuccessStatusCode)
+                    using (var httpClient = new HttpClient())
                     {
-                        string responseContent = await response.Content.ReadAsStringAsync();
+                        var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                        requestMessage.Headers.Add("contentType", "application/json");
+                        requestMessage.Headers.Add("Authorization", store.Token);
 
-                        var list = JsonConvert.DeserializeObject<List<ReportDetail>>(responseContent);
+                        HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
 
-                        if (list is not null)
-                            reportDetails.AddRange(list);
+                        if (response.IsSuccessStatusCode)
+                        {
+                            string responseContent = await response.Content.ReadAsStringAsync();
 
-                        foreach (var rd in reportDetails)
-                            rd.ProjectId = store.Id;
+                            var list = JsonConvert.DeserializeObject<List<ReportDetail>>(responseContent);
+
+                            if (list is not null)
+                                reportDetails.AddRange(list);
+
+                            foreach (var rd in reportDetails)
+                                rd.ProjectId = store.Id;
+                        }
                     }
+
+
+                    var data = reportDetails.Max(x => x.Create_dt);
+                   var rrdid = reportDetails.LastOrDefault().Rrd_id;
+
+                if (reportDetails.Count > 0)
+                {
+                    IsNext = true;
+                    date = $"?dateFrom={data.Value.AddSeconds(1).ToString("yyyy-MM-dd")}&rrdid={rrdid}&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
                 }
+                else
+                    IsNext = false;
 
-
-                var data = reportDetails.Max(x => x.Create_dt);
-            }
-            catch (Exception ex)
-            {
-
-            }
+            } while (IsNext);
 
             return reportDetails;
         }
