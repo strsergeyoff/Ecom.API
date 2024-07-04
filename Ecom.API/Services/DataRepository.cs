@@ -3,10 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using MySql.Data.MySqlClient;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
-using System.Diagnostics.Eventing.Reader;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -136,10 +134,10 @@ namespace Ecom.API.Services
             int error = 0;
             var stores = context.rise_projects.ToList();
 
-           
-              var  messageIncomes = await telegramBot.SendTextMessageAsync("740755376", "Загрузка поставок", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
-             MessageIncomes.Add(messageIncomes.MessageId, new List<string>());
+            var messageIncomes = await telegramBot.SendTextMessageAsync("740755376", "Загрузка поставок", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+
+            MessageIncomes.Add(messageIncomes.MessageId, new List<string>());
 
             MessageIncomes[messageIncomes.MessageId].Add("Загрузка поставок");
 
@@ -212,7 +210,7 @@ namespace Ecom.API.Services
             int _minutes = _elapsed.Minutes;
             int _seconds = _elapsed.Seconds;
 
-            MessageIncomes[messageIncomes.MessageId].Add($@"✅ Успешно: `{_stores-error} из {_stores}`
+            MessageIncomes[messageIncomes.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
 🆕 Загружено строк `{incomesCount} шт.`
 ⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
 
@@ -299,8 +297,8 @@ namespace Ecom.API.Services
 
             var stores = context.rise_projects.ToList();
 
-            var messageStocks = await telegramBot.SendTextMessageAsync("740755376", 
-                "Загрузка склада", 
+            var messageStocks = await telegramBot.SendTextMessageAsync("740755376",
+                "Загрузка склада",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageStocks.Add(messageStocks.MessageId, new List<string>());
@@ -310,7 +308,7 @@ namespace Ecom.API.Services
             _stopwatch.Start();
             foreach (var store in stores)
             {
-               
+
                 if (string.IsNullOrWhiteSpace(store?.Token) || store?.Token?.Length < 155 || store.Deleted.Value == true) continue;
                 _stores++;
 
@@ -444,11 +442,11 @@ namespace Ecom.API.Services
 
             var stores = context.rise_projects.ToList();
 
-            var messageOrders = await telegramBot.SendTextMessageAsync("740755376", "Загрузка заказов и отправленных товаров", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+            var messageOrders = await telegramBot.SendTextMessageAsync("740755376", "Загрузка заказов", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageOrders.Add(messageOrders.MessageId, new List<string>());
 
-            MessageOrders[messageOrders.MessageId].Add("Загрузка заказов и отправленных товаров");
+            MessageOrders[messageOrders.MessageId].Add("Загрузка заказов");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -503,7 +501,7 @@ namespace Ecom.API.Services
 
                     await EditMessage(messageOrders, _text);
 
-                   await FetchCardDispatchedAsync(store, orders, messageOrders);
+                    //await FetchCardDispatchedAsync(store, orders, messageOrders);
                 }
 
                 catch (Exception ex)
@@ -550,115 +548,138 @@ namespace Ecom.API.Services
 
         public async Task<List<rise_order>> FetchOrdersFromApi(rise_project store, DateTime? lastOrder)
         {
-            string dateFrom = lastOrder is null ? "?dateFrom=2023-01-29" : "?dateFrom=" + lastOrder.Value.ToString("yyyy-MM-ddTHH:mm:ss");
-            List<rise_order> orders = new List<rise_order>();
+            string dateFrom = lastOrder is null ? "?dateFrom=2023-01-29"
+                : "?dateFrom=" + lastOrder.Value.ToString("yyyy-MM-ddTHH:mm:ss");
 
-            using (var httpClient = new HttpClient())
+            List<rise_order> orders = new List<rise_order>();
+            do
             {
 
-                var apiUrl = $"https://statistics-api.wildberries.ru/api/v1/supplier/orders{dateFrom}";
-
-                var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                requestMessage.Headers.Add("contentType", "application/json");
-                requestMessage.Headers.Add("Authorization", store.Token);
-
-                HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
-
-                if (response.IsSuccessStatusCode)
+                try
                 {
-                    string responseContent = await response.Content.ReadAsStringAsync();
+                    using (var httpClient = new HttpClient())
+                    {
 
-                    if (lastOrder is not null)
-                        orders.AddRange(JsonConvert.DeserializeObject<List<rise_order>>(responseContent)?.Where(x => x.Date > lastOrder)?.ToList());
-                    else
-                        orders.AddRange(JsonConvert.DeserializeObject<List<rise_order>>(responseContent)?.ToList());
+                        var apiUrl = $"https://statistics-api.wildberries.ru/api/v1/supplier/orders{dateFrom}";
 
-                    foreach (var order in orders)
-                        order.ProjectId = store.Id;
+                        var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                        requestMessage.Headers.Add("contentType", "application/json");
+                        requestMessage.Headers.Add("Authorization", store.Token);
 
-                    return orders;
+                        HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
+
+                        if (response.IsSuccessStatusCode)
+                        {
+                            string responseContent = await response.Content.ReadAsStringAsync();
+
+                            if (lastOrder is not null)
+                                orders.AddRange(JsonConvert.DeserializeObject<List<rise_order>>(responseContent)?.Where(x => x.Date > lastOrder)?.ToList());
+                            else
+                                orders.AddRange(JsonConvert.DeserializeObject<List<rise_order>>(responseContent)?.ToList());
+
+                            foreach (var order in orders)
+                                order.ProjectId = store.Id;
+
+                            var data = orders?.Max(x => x?.LastChangeDate.Value)?.Date;
+
+                            if (data is null) break;
+
+                            if (data != DateTime.Now.Date)
+                            {
+                                dateFrom = "?dateFrom=" + data?.ToString("yyyy-MM-ddTHH:mm:ss");
+                                await Task.Delay(TimeSpan.FromMinutes(1));
+                            }
+                        }
+                    }
+
                 }
-            }
-
+                catch
+                {
+                    break;
+                }
+            } while (orders?.Max(x => x?.LastChangeDate.Value.Date) != DateTime.Now.Date);
             return orders;
         }
 
-        /// <summary>
-        /// Отправленные
-        /// </summary>
-        /// <returns></returns>
-        private async Task<List<rise_carddispatched>> FetchCardDispatchedAsync(rise_project store, List<rise_order> _orders, Message message)
-        {
-            Stopwatch stopwatch = new Stopwatch();
-            stopwatch.Start();
-
-            var result = await Task.Run(async () =>
-            {
-
-                var cards = context?.Cards
-                       .Where(x => x.ProjectId == store.Id)
-                       .Include(x => x.Photos)?
-                       .Include(X => X.Sizes)?.ToList();
-
-                var orders = _orders.Where(x => x.ProjectId == store.Id && !string.IsNullOrEmpty(x.Srid) && !x.IsCancel).ToList();
-
-                var dispatchedOrders = orders
-                ?.Select(x => new rise_carddispatched
-                {
-                    Srid = x.Srid,
-                    Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
-                    Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
-                    Order_dt = x.Date,
-                    Barcode = x.Barcode,
-                    NmId = x.NmId,
-                    Sa_name = x.SupplierArticle,
-                    Ts_name = x.TechSize,
-                    TotalPriceDiscount = x.TotalPriceDiscount,
-                    ProjectId = store.Id
-                });
-
-                return dispatchedOrders.ToList();
-
-            });
 
 
-            if(result.Count > 0)
-            {
-                using (var connection = new MySqlConnection(ConnectionMySQL))
-                {
-                    connection.Open();
 
-                    var bulk = new BulkOperation<rise_carddispatched>(connection)
-                    {
-                        DestinationTableName = "rise_cardsdispatched"
-                    };
+//        /// <summary>
+//        /// Отправленные
+//        /// </summary>
+//        /// <returns></returns>
+//        private async Task<List<rise_carddispatched>> FetchCardDispatchedAsync(rise_project store, List<rise_order> _orders, Message message)
+//        {
+//            Stopwatch stopwatch = new Stopwatch();
+//            stopwatch.Start();
 
-                    await bulk.BulkInsertAsync(result);
-                    connection.Close();
-                }
-            }
+//            var result = await Task.Run(async () =>
+//            {
 
-            stopwatch.Stop();
+//                var cards = context?.Cards
+//                       .Where(x => x.ProjectId == store.Id)
+//                       .Include(x => x.Photos)?
+//                       .Include(X => X.Sizes)?.ToList();
 
-            TimeSpan elapsed = stopwatch.Elapsed;
-            int hours = elapsed.Hours;
-            int minutes = elapsed.Minutes;
-            int seconds = elapsed.Seconds;
+//                var orders = _orders.Where(x => x.ProjectId == store.Id && !string.IsNullOrEmpty(x.Srid) && !x.IsCancel).ToList();
+
+//                var dispatchedOrders = orders
+//                ?.Select(x => new rise_carddispatched
+//                {
+//                    Srid = x.Srid,
+//                    Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
+//                    Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
+//                    Order_dt = x.Date,
+//                    Barcode = x.Barcode,
+//                    NmId = x.NmId,
+//                    Sa_name = x.SupplierArticle,
+//                    Ts_name = x.TechSize,
+//                    TotalPriceDiscount = x.TotalPriceDiscount,
+//                    ProjectId = store.Id
+//                });
+
+//                return dispatchedOrders.ToList();
+
+//            });
 
 
-            MessageOrders[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-🆕 Загружено строк `{result.Count} шт.`
-⏱️ Время загрузки отправленных товаров `{hours} ч {minutes} м. {seconds} с.`");
+//            if (result.Count > 0)
+//            {
+//                using (var connection = new MySqlConnection(ConnectionMySQL))
+//                {
+//                    connection.Open();
 
-            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                MessageOrders.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+//                    var bulk = new BulkOperation<rise_carddispatched>(connection)
+//                    {
+//                        DestinationTableName = "rise_cardsdispatched"
+//                    };
 
-            await EditMessage(message, _text);
+//                    await bulk.BulkInsertAsync(result);
+//                    connection.Close();
+//                }
+//            }
 
-            return result;
+//            stopwatch.Stop();
 
-        }
-        #endregion
+//            TimeSpan elapsed = stopwatch.Elapsed;
+//            int hours = elapsed.Hours;
+//            int minutes = elapsed.Minutes;
+//            int seconds = elapsed.Seconds;
+
+
+//            MessageOrders[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+//🆕 Загружено строк `{result.Count} шт.`
+//⏱️ Время загрузки отправленных товаров `{hours} ч {minutes} м. {seconds} с.`");
+
+//            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
+//                MessageOrders.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+
+//            await EditMessage(message, _text);
+
+//            return result;
+
+//        }
+//        #endregion
 
         #region Отчет
 
@@ -824,7 +845,7 @@ namespace Ecom.API.Services
             var stores = context.rise_projects.ToList();
 
             var messageSales = await telegramBot.SendTextMessageAsync("740755376",
-                "Загрузка продаж", 
+                "Загрузка продаж",
                 parseMode: ParseMode.Markdown);
 
             MessageSales.Add(messageSales.MessageId, new List<string>());
@@ -849,19 +870,19 @@ namespace Ecom.API.Services
                     {
                         salesCount += sales.Count;
 
-                            using (var connection = new MySqlConnection(ConnectionMySQL))
+                        using (var connection = new MySqlConnection(ConnectionMySQL))
+                        {
+                            connection.Open();
+
+                            var bulk = new BulkOperation<Sale>(connection)
                             {
-                                connection.Open();
+                                DestinationTableName = "Sales"
+                            };
 
-                                var bulk = new BulkOperation<Sale>(connection)
-                                {
-                                    DestinationTableName = "Sales"
-                                };
+                            await bulk.BulkInsertAsync(sales);
+                            connection.Close();
+                        }
 
-                              await bulk.BulkInsertAsync(sales);
-                                connection.Close();
-                            }
-                        
                     }
 
                     stopwatch.Stop();
@@ -907,7 +928,7 @@ namespace Ecom.API.Services
 🆕 Загружено строк `{salesCount} шт.`
 ⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
 
-            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}", 
+            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
                 MessageSales.Where(kv => kv.Key == messageSales.MessageId)
                 .SelectMany(kv => kv.Value));
 
@@ -1554,7 +1575,7 @@ namespace Ecom.API.Services
                         cardsCount += cardWildberriesNew.Count;
                         context?.Cards.RemoveRange(cardWildberriesOld);
                         await context.SaveChangesAsync();
-                        
+
 
                         await context?.Cards.AddRangeAsync(cardWildberriesNew);
                         await context.SaveChangesAsync();
@@ -1697,12 +1718,12 @@ namespace Ecom.API.Services
                                 IsNextPage = false;
                             else
                                 IsNextPage = true;
-                               
+
                         }
                         else
                             IsNextPage = false;
                     }
-                    
+
                 }
 
                 while (IsNextPage);
@@ -1949,7 +1970,7 @@ namespace Ecom.API.Services
 
             });
 
-            if(result.Count > 0)
+            if (result.Count > 0)
             {
                 using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
                 {
@@ -2062,7 +2083,7 @@ namespace Ecom.API.Services
             int minutes = elapsed.Minutes;
             int seconds = elapsed.Seconds;
 
-           
+
             MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{result.Count} шт.`
 ⏱️ Время загрузки возвращенных товаров `{hours} ч {minutes} м. {seconds} с.`");
@@ -2075,90 +2096,90 @@ namespace Ecom.API.Services
             return result;
         }
 
-//        /// <summary>
-//        /// Без статуса товары
-//        /// </summary>
-//        /// <returns></returns>
-//        private async Task<List<rise_cardnullstatus>> FilterCardsNullStatusAsync(List<rise_carddispatched> cardsDispatched, rise_project store)
-//        {
-//            Stopwatch stopwatch = new Stopwatch();
-//            stopwatch.Start();
+        //        /// <summary>
+        //        /// Без статуса товары
+        //        /// </summary>
+        //        /// <returns></returns>
+        //        private async Task<List<rise_cardnullstatus>> FilterCardsNullStatusAsync(List<rise_carddispatched> cardsDispatched, rise_project store)
+        //        {
+        //            Stopwatch stopwatch = new Stopwatch();
+        //            stopwatch.Start();
 
-//            var result = await Task.Run(async () =>
-//            {
-//                try
-//                {
+        //            var result = await Task.Run(async () =>
+        //            {
+        //                try
+        //                {
 
-//                    List<rise_cardnullstatus> nullStatusOrders = new List<rise_cardnullstatus>();
+        //                    List<rise_cardnullstatus> nullStatusOrders = new List<rise_cardnullstatus>();
 
-//                    foreach (var cd in cardsDispatched)
-//                    {
-//                        var dateFrom = cd.Order_dt.Value;
-//                        var dateTo = cd.Order_dt.Value.AddMonths(1);
+        //                    foreach (var cd in cardsDispatched)
+        //                    {
+        //                        var dateFrom = cd.Order_dt.Value;
+        //                        var dateTo = cd.Order_dt.Value.AddMonths(1);
 
-//                        var card = await context?.ReportDetails?.FirstOrDefaultAsync(x =>
-//                        x.Order_dt >= dateFrom &&
-//                        x.Order_dt <= dateTo &&
-//                        x.ProjectId == store.Id &&
-//                        x.Srid == cd.Srid);
+        //                        var card = await context?.ReportDetails?.FirstOrDefaultAsync(x =>
+        //                        x.Order_dt >= dateFrom &&
+        //                        x.Order_dt <= dateTo &&
+        //                        x.ProjectId == store.Id &&
+        //                        x.Srid == cd.Srid);
 
-//                        if (card is null) continue;
+        //                        if (card is null) continue;
 
-//                        nullStatusOrders.Add(new rise_cardnullstatus()
-//                        {
-//                            Srid = cd.Srid,
-//                            Url = cd.Url,
+        //                        nullStatusOrders.Add(new rise_cardnullstatus()
+        //                        {
+        //                            Srid = cd.Srid,
+        //                            Url = cd.Url,
 
-//                            Image = cd.Image,
+        //                            Image = cd.Image,
 
-//                            Order_dt = cd.Order_dt,
+        //                            Order_dt = cd.Order_dt,
 
-//                            Barcode = cd.Barcode,
-//                            NmId = cd.NmId,
-//                            Sa_name = cd.Sa_name,
+        //                            Barcode = cd.Barcode,
+        //                            NmId = cd.NmId,
+        //                            Sa_name = cd.Sa_name,
 
-//                            Ts_name = cd.Ts_name,
-//                            TotalPriceDiscount = cd.TotalPriceDiscount,
-//                            ProjectId = cd.ProjectId
+        //                            Ts_name = cd.Ts_name,
+        //                            TotalPriceDiscount = cd.TotalPriceDiscount,
+        //                            ProjectId = cd.ProjectId
 
-//                        });
-//                    }
+        //                        });
+        //                    }
 
-//                    return nullStatusOrders;
-//                }
-//                catch (Exception ex)
-//                {
+        //                    return nullStatusOrders;
+        //                }
+        //                catch (Exception ex)
+        //                {
 
-//                    throw;
-//                }
+        //                    throw;
+        //                }
 
-//            });
+        //            });
 
-//            var cardsNullStatus = context?.rise_cardsnullstatus?.Where(x => x.ProjectId == store.Id).ToList();
-//            context?.rise_cardsnullstatus?.RemoveRange(cardsNullStatus);
-//            await context?.SaveChangesAsync();
+        //            var cardsNullStatus = context?.rise_cardsnullstatus?.Where(x => x.ProjectId == store.Id).ToList();
+        //            context?.rise_cardsnullstatus?.RemoveRange(cardsNullStatus);
+        //            await context?.SaveChangesAsync();
 
-//            context?.rise_cardsnullstatus?.AddRangeAsync(result);
-//            await context?.SaveChangesAsync();
+        //            context?.rise_cardsnullstatus?.AddRangeAsync(result);
+        //            await context?.SaveChangesAsync();
 
-//            stopwatch.Stop();
+        //            stopwatch.Stop();
 
-//            TimeSpan elapsed = stopwatch.Elapsed;
-//            int hours = elapsed.Hours;
-//            int minutes = elapsed.Minutes;
-//            int seconds = elapsed.Seconds;
+        //            TimeSpan elapsed = stopwatch.Elapsed;
+        //            int hours = elapsed.Hours;
+        //            int minutes = elapsed.Minutes;
+        //            int seconds = elapsed.Seconds;
 
-//            string message = @$"🏦 Магазин `{store.Title}`
-//🆕 Загружено строк `{result.Count - cardsNullStatus.Count} шт.`
-//⏱️ Время загрузки без статуса товаров `{hours} ч {minutes} м. {seconds} с.`
+        //            string message = @$"🏦 Магазин `{store.Title}`
+        //🆕 Загружено строк `{result.Count - cardsNullStatus.Count} шт.`
+        //⏱️ Время загрузки без статуса товаров `{hours} ч {minutes} м. {seconds} с.`
 
-//#{store.Title.Replace(" ", "") + DateTime.Now.Date.ToString("ddMMyyy")} #БезСтатусаТовары";
+        //#{store.Title.Replace(" ", "") + DateTime.Now.Date.ToString("ddMMyyy")} #БезСтатусаТовары";
 
-//            await telegramBot.SendTextMessageAsync("740755376", message, parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+        //            await telegramBot.SendTextMessageAsync("740755376", message, parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
 
-//            return result;
-//        }
+        //            return result;
+        //        }
 
 
         #endregion
@@ -2189,15 +2210,15 @@ namespace Ecom.API.Services
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
-            
 
-                foreach (var store in stores)
-                {
+
+            foreach (var store in stores)
+            {
                 try
                 {
                     _stores++;
                     Stopwatch stopwatch = new Stopwatch();
-                stopwatch.Start();
+                    stopwatch.Start();
 
 
                     //Получение список рекламных кампаний по магазину У валбериса
@@ -2286,7 +2307,7 @@ namespace Ecom.API.Services
 
                     if (advertslist.Count > 0)
                         //Обновляем статистику
-                      context.rise_adverts.UpdateRange(advertslist);
+                        context.rise_adverts.UpdateRange(advertslist);
 
 
                     var result = await context?.SaveChangesAsync();
@@ -2326,7 +2347,7 @@ namespace Ecom.API.Services
                 }
 
             }
-            
+
 
             _stopwatch.Stop();
 
@@ -2382,19 +2403,19 @@ namespace Ecom.API.Services
                         date = date.AddDays(numberOfDays);
 
                     var Array = isData ? adverts.Select(x =>
-new
-{
-    id = x.AdvertId,
-    dates = new string[] { DateTime.Now.Date.AddDays(-1).ToString("yyyy-MM-dd") }
-}).ToArray() :
-adverts.Select(x =>
-new
-{
-    id = x.AdvertId,
-    dates = Enumerable.Range(0, 4)
-.Select(offset => date.AddDays(-offset).ToString("yyyy-MM-dd"))
-.ToArray()
-}).ToArray();
+    new
+    {
+        id = x.AdvertId,
+        dates = new string[] { DateTime.Now.Date.AddDays(-1).ToString("yyyy-MM-dd") }
+    }).ToArray() :
+    adverts.Select(x =>
+    new
+    {
+        id = x.AdvertId,
+        dates = Enumerable.Range(0, 4)
+    .Select(offset => date.AddDays(-offset).ToString("yyyy-MM-dd"))
+    .ToArray()
+    }).ToArray();
 
                     var js = System.Text.Json.JsonSerializer.Serialize(Array);
 
@@ -2494,7 +2515,7 @@ new
 
                         if (stopwatch.Elapsed.Minutes < 0)
                             await Task.Delay(TimeSpan.FromMinutes(1) - stopwatch.Elapsed);
-                        
+
                     }
 
                 } while (IsLoad);
