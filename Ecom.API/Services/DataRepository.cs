@@ -12,7 +12,6 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Z.BulkOperations;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Ecom.API.Services
 {
@@ -598,7 +597,7 @@ namespace Ecom.API.Services
                 }
                 catch
                 {
-                   
+
                 }
             } while (orders?.Max(x => x?.LastChangeDate.Value.Date) != DateTime.Now.Date);
             return orders;
@@ -697,7 +696,7 @@ namespace Ecom.API.Services
 
             var stores = context.rise_projects.ToList();
 
-            var messageReportDetails = await telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов и ленты товаров", 
+            var messageReportDetails = await telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов и ленты товаров",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageReportDetails.Add(messageReportDetails.MessageId, new List<string>());
@@ -806,8 +805,11 @@ namespace Ecom.API.Services
 
             bool IsNext = true;
 
-            do
+
+            try
             {
+                do
+                {
                     var apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod{date}";
 
 
@@ -835,17 +837,23 @@ namespace Ecom.API.Services
 
 
                     var data = reportDetails.Max(x => x.Create_dt);
-                   var rrdid = reportDetails.LastOrDefault().Rrd_id;
+                    var rrdid = reportDetails.LastOrDefault().Rrd_id;
 
-                if (reportDetails.Count > 0)
-                {
-                    IsNext = true;
-                    date = $"?dateFrom={data.Value.AddSeconds(1).ToString("yyyy-MM-dd")}&rrdid={rrdid}&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
-                }
-                else
-                    IsNext = false;
+                    if (reportDetails.Count > 0)
+                    {
+                        IsNext = true;
+                        date = $"?dateFrom={data.Value.AddSeconds(1).ToString("yyyy-MM-dd")}&rrdid={rrdid}&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
+                    }
+                    else
+                        IsNext = false;
 
-            } while (IsNext);
+                } while (IsNext);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.InnerException.ToString())
+            }
+
 
             return reportDetails;
         }
@@ -1934,188 +1942,188 @@ namespace Ecom.API.Services
 
         }
 
-//        /// <summary>
-//        /// Купленные товары
-//        /// </summary>
-//        /// <param name="store">Магазин</param>
-//        /// <returns></returns>
-//        private async Task<List<rise_cardpurchased>> FetchCardsPurchasedAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
-//        {
-//            Stopwatch stopwatch = new Stopwatch();
-//            stopwatch.Start();
+        //        /// <summary>
+        //        /// Купленные товары
+        //        /// </summary>
+        //        /// <param name="store">Магазин</param>
+        //        /// <returns></returns>
+        //        private async Task<List<rise_cardpurchased>> FetchCardsPurchasedAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
+        //        {
+        //            Stopwatch stopwatch = new Stopwatch();
+        //            stopwatch.Start();
 
-//            var result = await Task.Run(async () =>
-//            {
-//                try
-//                {
+        //            var result = await Task.Run(async () =>
+        //            {
+        //                try
+        //                {
 
-//                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "продажа" && x.ProjectId == store.Id).ToList();
+        //                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "продажа" && x.ProjectId == store.Id).ToList();
 
-//                    var cards = context?.Cards
-//                        .Include(x => x.Photos)?
-//                        .Include(X => X.Sizes)?
-//                        .Where(x => x.ProjectId == store.Id).ToList();
+        //                    var cards = context?.Cards
+        //                        .Include(x => x.Photos)?
+        //                        .Include(X => X.Sizes)?
+        //                        .Where(x => x.ProjectId == store.Id).ToList();
 
-//                    var orders = context?.rise_orders
-//                        .Where(x => x.ProjectId == store.Id).ToList();
+        //                    var orders = context?.rise_orders
+        //                        .Where(x => x.ProjectId == store.Id).ToList();
 
-//                    var result = orders
-//                     .Where(x => x.IsOrdered && !x.IsCancel)
-//                     .Where(x => list.Any(y => y.Srid == x.Srid))
-//                     .Select(x => new rise_cardpurchased
-//                     {
+        //                    var result = orders
+        //                     .Where(x => x.IsOrdered && !x.IsCancel)
+        //                     .Where(x => list.Any(y => y.Srid == x.Srid))
+        //                     .Select(x => new rise_cardpurchased
+        //                     {
 
-//                         Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
+        //                         Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
 
-//                         Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
+        //                         Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
 
-//                         Sale_dt = list?.FirstOrDefault(y => y.Srid == x.Srid)?.Sale_dt,
-//                         Order_dt = x.Date,
+        //                         Sale_dt = list?.FirstOrDefault(y => y.Srid == x.Srid)?.Sale_dt,
+        //                         Order_dt = x.Date,
 
-//                         Barcode = x.Barcode,
-//                         NmId = x.NmId,
-//                         Sa_name = x.SupplierArticle,
+        //                         Barcode = x.Barcode,
+        //                         NmId = x.NmId,
+        //                         Sa_name = x.SupplierArticle,
 
-//                         Ts_name = x.TechSize,
-//                         TotalPriceDiscount = x.TotalPriceDiscount,
-//                         ProjectId = store.Id
-//                     });
+        //                         Ts_name = x.TechSize,
+        //                         TotalPriceDiscount = x.TotalPriceDiscount,
+        //                         ProjectId = store.Id
+        //                     });
 
-//                    return result.ToList();
-//                }
-//                catch (Exception ex)
-//                {
+        //                    return result.ToList();
+        //                }
+        //                catch (Exception ex)
+        //                {
 
-//                    throw;
-//                }
+        //                    throw;
+        //                }
 
-//            });
+        //            });
 
-//            if (result.Count > 0)
-//            {
-//                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
-//                {
-//                    connection.Open();
+        //            if (result.Count > 0)
+        //            {
+        //                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
+        //                {
+        //                    connection.Open();
 
-//                    var bulk = new BulkOperation<rise_cardpurchased>(connection)
-//                    {
-//                        DestinationTableName = "rise_cardspurchaed"
-//                    };
+        //                    var bulk = new BulkOperation<rise_cardpurchased>(connection)
+        //                    {
+        //                        DestinationTableName = "rise_cardspurchaed"
+        //                    };
 
-//                    await bulk.BulkInsertAsync(result);
-//                    connection.Close();
-//                }
-//            }
+        //                    await bulk.BulkInsertAsync(result);
+        //                    connection.Close();
+        //                }
+        //            }
 
-//            stopwatch.Stop();
+        //            stopwatch.Stop();
 
-//            TimeSpan elapsed = stopwatch.Elapsed;
-//            int hours = elapsed.Hours;
-//            int minutes = elapsed.Minutes;
-//            int seconds = elapsed.Seconds;
+        //            TimeSpan elapsed = stopwatch.Elapsed;
+        //            int hours = elapsed.Hours;
+        //            int minutes = elapsed.Minutes;
+        //            int seconds = elapsed.Seconds;
 
-//            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-//🆕 Загружено строк `{result.Count} шт.`
-//⏱️ Время загрузки купленных товаров `{hours} ч {minutes} м. {seconds} с.`");
+        //            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+        //🆕 Загружено строк `{result.Count} шт.`
+        //⏱️ Время загрузки купленных товаров `{hours} ч {minutes} м. {seconds} с.`");
 
-//            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-//                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+        //            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
+        //                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
 
-//            await EditMessage(message, _text);
+        //            await EditMessage(message, _text);
 
-//            return result;
-//        }
+        //            return result;
+        //        }
 
-//        /// <summary>
-//        /// Возвращенные товары
-//        /// </summary>
-//        /// <returns></returns>
-//        private async Task<List<rise_cardreturn>> FetchCardsReturnsAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
-//        {
-//            Stopwatch stopwatch = new Stopwatch();
-//            stopwatch.Start();
+        //        /// <summary>
+        //        /// Возвращенные товары
+        //        /// </summary>
+        //        /// <returns></returns>
+        //        private async Task<List<rise_cardreturn>> FetchCardsReturnsAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
+        //        {
+        //            Stopwatch stopwatch = new Stopwatch();
+        //            stopwatch.Start();
 
-//            var result = await Task.Run(async () =>
-//            {
-//                try
-//                {
-
-
-//                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "возврат" && x.ProjectId == store.Id).ToList();
-
-//                    var cards = context?.Cards
-//                           .Include(x => x.Photos)?
-//                           .Include(X => X.Sizes)?
-//                           .Where(x => x.ProjectId == store.Id).ToList();
-
-//                    var orders = context?.rise_orders
-//                        .Where(x => x.ProjectId == store.Id).ToList();
-
-//                    var _cardsReturns = orders
-//                    ?.Where(x => x.IsOrdered && !x.IsCancel)
-//                ?.Where(x => list.Any(y => y.Srid == x.Srid))
-//                    ?.Select(x => new rise_cardreturn
-//                    {
-//                        Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
-
-//                        Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
-
-//                        Order_dt = x.Date,
-
-//                        Barcode = x.Barcode,
-//                        NmId = x.NmId,
-//                        Sa_name = x.SupplierArticle,
-
-//                        Ts_name = x.TechSize,
-//                        TotalPriceDiscount = x.TotalPriceDiscount,
-//                        ProjectId = store.Id
-//                    });
-
-//                    return _cardsReturns.ToList();
-//                }
-//                catch (Exception ex)
-//                {
-
-//                    throw;
-//                }
-
-//            });
-
-//            if (result.Count > 0)
-//            {
-//                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
-//                {
-//                    connection.Open();
-
-//                    var bulk = new BulkOperation<rise_cardreturn>(connection)
-//                    {
-//                        DestinationTableName = "rise_cardsreturns"
-//                    };
-
-//                    await bulk.BulkInsertAsync(result);
-//                    connection.Close();
-//                }
-//            }
-
-//            stopwatch.Stop();
-
-//            TimeSpan elapsed = stopwatch.Elapsed;
-//            int hours = elapsed.Hours;
-//            int minutes = elapsed.Minutes;
-//            int seconds = elapsed.Seconds;
+        //            var result = await Task.Run(async () =>
+        //            {
+        //                try
+        //                {
 
 
-//            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-//🆕 Загружено строк `{result.Count} шт.`
-//⏱️ Время загрузки возвращенных товаров `{hours} ч {minutes} м. {seconds} с.`");
+        //                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "возврат" && x.ProjectId == store.Id).ToList();
 
-//            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-//                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+        //                    var cards = context?.Cards
+        //                           .Include(x => x.Photos)?
+        //                           .Include(X => X.Sizes)?
+        //                           .Where(x => x.ProjectId == store.Id).ToList();
 
-//            await EditMessage(message, _text);
+        //                    var orders = context?.rise_orders
+        //                        .Where(x => x.ProjectId == store.Id).ToList();
 
-//            return result;
-//        }
+        //                    var _cardsReturns = orders
+        //                    ?.Where(x => x.IsOrdered && !x.IsCancel)
+        //                ?.Where(x => list.Any(y => y.Srid == x.Srid))
+        //                    ?.Select(x => new rise_cardreturn
+        //                    {
+        //                        Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
+
+        //                        Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
+
+        //                        Order_dt = x.Date,
+
+        //                        Barcode = x.Barcode,
+        //                        NmId = x.NmId,
+        //                        Sa_name = x.SupplierArticle,
+
+        //                        Ts_name = x.TechSize,
+        //                        TotalPriceDiscount = x.TotalPriceDiscount,
+        //                        ProjectId = store.Id
+        //                    });
+
+        //                    return _cardsReturns.ToList();
+        //                }
+        //                catch (Exception ex)
+        //                {
+
+        //                    throw;
+        //                }
+
+        //            });
+
+        //            if (result.Count > 0)
+        //            {
+        //                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
+        //                {
+        //                    connection.Open();
+
+        //                    var bulk = new BulkOperation<rise_cardreturn>(connection)
+        //                    {
+        //                        DestinationTableName = "rise_cardsreturns"
+        //                    };
+
+        //                    await bulk.BulkInsertAsync(result);
+        //                    connection.Close();
+        //                }
+        //            }
+
+        //            stopwatch.Stop();
+
+        //            TimeSpan elapsed = stopwatch.Elapsed;
+        //            int hours = elapsed.Hours;
+        //            int minutes = elapsed.Minutes;
+        //            int seconds = elapsed.Seconds;
+
+
+        //            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+        //🆕 Загружено строк `{result.Count} шт.`
+        //⏱️ Время загрузки возвращенных товаров `{hours} ч {minutes} м. {seconds} с.`");
+
+        //            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
+        //                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+
+        //            await EditMessage(message, _text);
+
+        //            return result;
+        //        }
 
         //        /// <summary>
         //        /// Без статуса товары
