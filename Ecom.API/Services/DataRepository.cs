@@ -12,6 +12,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Z.BulkOperations;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Ecom.API.Services
 {
@@ -429,7 +430,7 @@ namespace Ecom.API.Services
         }
         #endregion
 
-        #region Заказы и отправленные товары
+        #region Заказы
 
         /// <summary>
         /// Загрузка заказов
@@ -437,6 +438,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadOrders()
         {
+            int newRow = 0;
             int _stores = 0;
             int error = 0;
 
@@ -471,7 +473,7 @@ namespace Ecom.API.Services
 
                     if (orders.Count > 0)
                     {
-
+                        newRow += orders.Count;
                         using (var connection = new MySqlConnection(ConnectionMySQL))
                         {
                             connection.Open();
@@ -525,6 +527,7 @@ namespace Ecom.API.Services
             int _minutes = _elapsed.Minutes;
             int _seconds = _elapsed.Seconds;
             MessageOrders[messageOrders.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
+🆕 Загружено строк `{newRow} шт.`
 ⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
 
             string text = string.Join($"{Environment.NewLine}{Environment.NewLine}", MessageOrders.Where(kv => kv.Key == messageOrders.MessageId).SelectMany(kv => kv.Value));
@@ -595,7 +598,7 @@ namespace Ecom.API.Services
                 }
                 catch
                 {
-                    break;
+                   
                 }
             } while (orders?.Max(x => x?.LastChangeDate.Value.Date) != DateTime.Now.Date);
             return orders;
@@ -604,82 +607,82 @@ namespace Ecom.API.Services
 
 
 
-//        /// <summary>
-//        /// Отправленные
-//        /// </summary>
-//        /// <returns></returns>
-//        private async Task<List<rise_carddispatched>> FetchCardDispatchedAsync(rise_project store, List<rise_order> _orders, Message message)
-//        {
-//            Stopwatch stopwatch = new Stopwatch();
-//            stopwatch.Start();
+        //        /// <summary>
+        //        /// Отправленные
+        //        /// </summary>
+        //        /// <returns></returns>
+        //        private async Task<List<rise_carddispatched>> FetchCardDispatchedAsync(rise_project store, List<rise_order> _orders, Message message)
+        //        {
+        //            Stopwatch stopwatch = new Stopwatch();
+        //            stopwatch.Start();
 
-//            var result = await Task.Run(async () =>
-//            {
+        //            var result = await Task.Run(async () =>
+        //            {
 
-//                var cards = context?.Cards
-//                       .Where(x => x.ProjectId == store.Id)
-//                       .Include(x => x.Photos)?
-//                       .Include(X => X.Sizes)?.ToList();
+        //                var cards = context?.Cards
+        //                       .Where(x => x.ProjectId == store.Id)
+        //                       .Include(x => x.Photos)?
+        //                       .Include(X => X.Sizes)?.ToList();
 
-//                var orders = _orders.Where(x => x.ProjectId == store.Id && !string.IsNullOrEmpty(x.Srid) && !x.IsCancel).ToList();
+        //                var orders = _orders.Where(x => x.ProjectId == store.Id && !string.IsNullOrEmpty(x.Srid) && !x.IsCancel).ToList();
 
-//                var dispatchedOrders = orders
-//                ?.Select(x => new rise_carddispatched
-//                {
-//                    Srid = x.Srid,
-//                    Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
-//                    Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
-//                    Order_dt = x.Date,
-//                    Barcode = x.Barcode,
-//                    NmId = x.NmId,
-//                    Sa_name = x.SupplierArticle,
-//                    Ts_name = x.TechSize,
-//                    TotalPriceDiscount = x.TotalPriceDiscount,
-//                    ProjectId = store.Id
-//                });
+        //                var dispatchedOrders = orders
+        //                ?.Select(x => new rise_carddispatched
+        //                {
+        //                    Srid = x.Srid,
+        //                    Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
+        //                    Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
+        //                    Order_dt = x.Date,
+        //                    Barcode = x.Barcode,
+        //                    NmId = x.NmId,
+        //                    Sa_name = x.SupplierArticle,
+        //                    Ts_name = x.TechSize,
+        //                    TotalPriceDiscount = x.TotalPriceDiscount,
+        //                    ProjectId = store.Id
+        //                });
 
-//                return dispatchedOrders.ToList();
+        //                return dispatchedOrders.ToList();
 
-//            });
-
-
-//            if (result.Count > 0)
-//            {
-//                using (var connection = new MySqlConnection(ConnectionMySQL))
-//                {
-//                    connection.Open();
-
-//                    var bulk = new BulkOperation<rise_carddispatched>(connection)
-//                    {
-//                        DestinationTableName = "rise_cardsdispatched"
-//                    };
-
-//                    await bulk.BulkInsertAsync(result);
-//                    connection.Close();
-//                }
-//            }
-
-//            stopwatch.Stop();
-
-//            TimeSpan elapsed = stopwatch.Elapsed;
-//            int hours = elapsed.Hours;
-//            int minutes = elapsed.Minutes;
-//            int seconds = elapsed.Seconds;
+        //            });
 
 
-//            MessageOrders[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-//🆕 Загружено строк `{result.Count} шт.`
-//⏱️ Время загрузки отправленных товаров `{hours} ч {minutes} м. {seconds} с.`");
+        //            if (result.Count > 0)
+        //            {
+        //                using (var connection = new MySqlConnection(ConnectionMySQL))
+        //                {
+        //                    connection.Open();
 
-//            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-//                MessageOrders.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+        //                    var bulk = new BulkOperation<rise_carddispatched>(connection)
+        //                    {
+        //                        DestinationTableName = "rise_cardsdispatched"
+        //                    };
 
-//            await EditMessage(message, _text);
+        //                    await bulk.BulkInsertAsync(result);
+        //                    connection.Close();
+        //                }
+        //            }
 
-//            return result;
+        //            stopwatch.Stop();
 
-//        }
-//        #endregion
+        //            TimeSpan elapsed = stopwatch.Elapsed;
+        //            int hours = elapsed.Hours;
+        //            int minutes = elapsed.Minutes;
+        //            int seconds = elapsed.Seconds;
+
+
+        //            MessageOrders[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+        //🆕 Загружено строк `{result.Count} шт.`
+        //⏱️ Время загрузки отправленных товаров `{hours} ч {minutes} м. {seconds} с.`");
+
+        //            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
+        //                MessageOrders.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+
+        //            await EditMessage(message, _text);
+
+        //            return result;
+
+        //        }
+        #endregion
 
         #region Отчет
 
@@ -694,11 +697,12 @@ namespace Ecom.API.Services
 
             var stores = context.rise_projects.ToList();
 
-            var messageReportDetails = await telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов, ленты товаров, купленных и возвращенных товаров", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+            var messageReportDetails = await telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов и ленты товаров", 
+                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageReportDetails.Add(messageReportDetails.MessageId, new List<string>());
 
-            MessageReportDetails[messageReportDetails.MessageId].Add("Загрузка отчетов, ленты товаров, купленных и возвращенных товаров");
+            MessageReportDetails[messageReportDetails.MessageId].Add("Загрузка отчетов и ленты товаров");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -750,9 +754,6 @@ namespace Ecom.API.Services
 
                     await EditMessage(messageReportDetails, _text);
 
-                    await FetchCardsPurchasedAsync(store, reportDetails, messageReportDetails);
-                    await FetchCardsReturnsAsync(store, reportDetails, messageReportDetails);
-
                     await DataAnalysisForCardsFeedsAsync(store, messageReportDetails);
                 }
                 catch (Exception ex)
@@ -798,33 +799,45 @@ namespace Ecom.API.Services
         /// <returns></returns>
         private async Task<List<ReportDetail>> FetchReportDetailsFromApi(rise_project store, DateTime? lastDate)
         {
-            string date = lastDate is null ? $"?dateFrom=2024-01-29&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}" : $"?dateFrom={lastDate.Value.AddDays(1).ToString("yyyy-MM-dd")}&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
+            string date = lastDate is null ? $"?dateFrom=2024-01-29&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}"
+                : $"?dateFrom={lastDate.Value.AddDays(1).ToString("yyyy-MM-dd")}&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
+
             List<ReportDetail> reportDetails = new List<ReportDetail>();
 
-            var apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod{date}";
-
-            using (var httpClient = new HttpClient())
+            try
             {
-                var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                requestMessage.Headers.Add("contentType", "application/json");
-                requestMessage.Headers.Add("Authorization", store.Token);
+                var apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod{date}";
 
-                HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
 
-                if (response.IsSuccessStatusCode)
+                using (var httpClient = new HttpClient())
                 {
-                    string responseContent = await response.Content.ReadAsStringAsync();
+                    var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                    requestMessage.Headers.Add("contentType", "application/json");
+                    requestMessage.Headers.Add("Authorization", store.Token);
 
-                    var list = JsonConvert.DeserializeObject<List<ReportDetail>>(responseContent);
+                    HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
 
-                    if (list is not null)
-                        reportDetails.AddRange(list);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        string responseContent = await response.Content.ReadAsStringAsync();
 
-                    foreach (var rd in reportDetails)
-                        rd.ProjectId = store.Id;
+                        var list = JsonConvert.DeserializeObject<List<ReportDetail>>(responseContent);
+
+                        if (list is not null)
+                            reportDetails.AddRange(list);
+
+                        foreach (var rd in reportDetails)
+                            rd.ProjectId = store.Id;
+                    }
                 }
-            }
 
+
+                var data = reportDetails.Max(x => x.Create_dt);
+            }
+            catch (Exception ex)
+            {
+
+            }
 
             return reportDetails;
         }
@@ -1913,188 +1926,188 @@ namespace Ecom.API.Services
 
         }
 
-        /// <summary>
-        /// Купленные товары
-        /// </summary>
-        /// <param name="store">Магазин</param>
-        /// <returns></returns>
-        private async Task<List<rise_cardpurchased>> FetchCardsPurchasedAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
-        {
-            Stopwatch stopwatch = new Stopwatch();
-            stopwatch.Start();
+//        /// <summary>
+//        /// Купленные товары
+//        /// </summary>
+//        /// <param name="store">Магазин</param>
+//        /// <returns></returns>
+//        private async Task<List<rise_cardpurchased>> FetchCardsPurchasedAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
+//        {
+//            Stopwatch stopwatch = new Stopwatch();
+//            stopwatch.Start();
 
-            var result = await Task.Run(async () =>
-            {
-                try
-                {
+//            var result = await Task.Run(async () =>
+//            {
+//                try
+//                {
 
-                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "продажа" && x.ProjectId == store.Id).ToList();
+//                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "продажа" && x.ProjectId == store.Id).ToList();
 
-                    var cards = context?.Cards
-                        .Include(x => x.Photos)?
-                        .Include(X => X.Sizes)?
-                        .Where(x => x.ProjectId == store.Id).ToList();
+//                    var cards = context?.Cards
+//                        .Include(x => x.Photos)?
+//                        .Include(X => X.Sizes)?
+//                        .Where(x => x.ProjectId == store.Id).ToList();
 
-                    var orders = context?.rise_orders
-                        .Where(x => x.ProjectId == store.Id).ToList();
+//                    var orders = context?.rise_orders
+//                        .Where(x => x.ProjectId == store.Id).ToList();
 
-                    var result = orders
-                     .Where(x => x.IsOrdered && !x.IsCancel)
-                     .Where(x => list.Any(y => y.Srid == x.Srid))
-                     .Select(x => new rise_cardpurchased
-                     {
+//                    var result = orders
+//                     .Where(x => x.IsOrdered && !x.IsCancel)
+//                     .Where(x => list.Any(y => y.Srid == x.Srid))
+//                     .Select(x => new rise_cardpurchased
+//                     {
 
-                         Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
+//                         Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
 
-                         Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
+//                         Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
 
-                         Sale_dt = list?.FirstOrDefault(y => y.Srid == x.Srid)?.Sale_dt,
-                         Order_dt = x.Date,
+//                         Sale_dt = list?.FirstOrDefault(y => y.Srid == x.Srid)?.Sale_dt,
+//                         Order_dt = x.Date,
 
-                         Barcode = x.Barcode,
-                         NmId = x.NmId,
-                         Sa_name = x.SupplierArticle,
+//                         Barcode = x.Barcode,
+//                         NmId = x.NmId,
+//                         Sa_name = x.SupplierArticle,
 
-                         Ts_name = x.TechSize,
-                         TotalPriceDiscount = x.TotalPriceDiscount,
-                         ProjectId = store.Id
-                     });
+//                         Ts_name = x.TechSize,
+//                         TotalPriceDiscount = x.TotalPriceDiscount,
+//                         ProjectId = store.Id
+//                     });
 
-                    return result.ToList();
-                }
-                catch (Exception ex)
-                {
+//                    return result.ToList();
+//                }
+//                catch (Exception ex)
+//                {
 
-                    throw;
-                }
+//                    throw;
+//                }
 
-            });
+//            });
 
-            if (result.Count > 0)
-            {
-                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
-                {
-                    connection.Open();
+//            if (result.Count > 0)
+//            {
+//                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
+//                {
+//                    connection.Open();
 
-                    var bulk = new BulkOperation<rise_cardpurchased>(connection)
-                    {
-                        DestinationTableName = "rise_cardspurchaed"
-                    };
+//                    var bulk = new BulkOperation<rise_cardpurchased>(connection)
+//                    {
+//                        DestinationTableName = "rise_cardspurchaed"
+//                    };
 
-                    await bulk.BulkInsertAsync(result);
-                    connection.Close();
-                }
-            }
+//                    await bulk.BulkInsertAsync(result);
+//                    connection.Close();
+//                }
+//            }
 
-            stopwatch.Stop();
+//            stopwatch.Stop();
 
-            TimeSpan elapsed = stopwatch.Elapsed;
-            int hours = elapsed.Hours;
-            int minutes = elapsed.Minutes;
-            int seconds = elapsed.Seconds;
+//            TimeSpan elapsed = stopwatch.Elapsed;
+//            int hours = elapsed.Hours;
+//            int minutes = elapsed.Minutes;
+//            int seconds = elapsed.Seconds;
 
-            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-🆕 Загружено строк `{result.Count} шт.`
-⏱️ Время загрузки купленных товаров `{hours} ч {minutes} м. {seconds} с.`");
+//            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+//🆕 Загружено строк `{result.Count} шт.`
+//⏱️ Время загрузки купленных товаров `{hours} ч {minutes} м. {seconds} с.`");
 
-            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+//            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
+//                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
 
-            await EditMessage(message, _text);
+//            await EditMessage(message, _text);
 
-            return result;
-        }
+//            return result;
+//        }
 
-        /// <summary>
-        /// Возвращенные товары
-        /// </summary>
-        /// <returns></returns>
-        private async Task<List<rise_cardreturn>> FetchCardsReturnsAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
-        {
-            Stopwatch stopwatch = new Stopwatch();
-            stopwatch.Start();
+//        /// <summary>
+//        /// Возвращенные товары
+//        /// </summary>
+//        /// <returns></returns>
+//        private async Task<List<rise_cardreturn>> FetchCardsReturnsAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
+//        {
+//            Stopwatch stopwatch = new Stopwatch();
+//            stopwatch.Start();
 
-            var result = await Task.Run(async () =>
-            {
-                try
-                {
-
-
-                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "возврат" && x.ProjectId == store.Id).ToList();
-
-                    var cards = context?.Cards
-                           .Include(x => x.Photos)?
-                           .Include(X => X.Sizes)?
-                           .Where(x => x.ProjectId == store.Id).ToList();
-
-                    var orders = context?.rise_orders
-                        .Where(x => x.ProjectId == store.Id).ToList();
-
-                    var _cardsReturns = orders
-                    ?.Where(x => x.IsOrdered && !x.IsCancel)
-                ?.Where(x => list.Any(y => y.Srid == x.Srid))
-                    ?.Select(x => new rise_cardreturn
-                    {
-                        Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
-
-                        Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
-
-                        Order_dt = x.Date,
-
-                        Barcode = x.Barcode,
-                        NmId = x.NmId,
-                        Sa_name = x.SupplierArticle,
-
-                        Ts_name = x.TechSize,
-                        TotalPriceDiscount = x.TotalPriceDiscount,
-                        ProjectId = store.Id
-                    });
-
-                    return _cardsReturns.ToList();
-                }
-                catch (Exception ex)
-                {
-
-                    throw;
-                }
-
-            });
-
-            if (result.Count > 0)
-            {
-                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
-                {
-                    connection.Open();
-
-                    var bulk = new BulkOperation<rise_cardreturn>(connection)
-                    {
-                        DestinationTableName = "rise_cardsreturns"
-                    };
-
-                    await bulk.BulkInsertAsync(result);
-                    connection.Close();
-                }
-            }
-
-            stopwatch.Stop();
-
-            TimeSpan elapsed = stopwatch.Elapsed;
-            int hours = elapsed.Hours;
-            int minutes = elapsed.Minutes;
-            int seconds = elapsed.Seconds;
+//            var result = await Task.Run(async () =>
+//            {
+//                try
+//                {
 
 
-            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-🆕 Загружено строк `{result.Count} шт.`
-⏱️ Время загрузки возвращенных товаров `{hours} ч {minutes} м. {seconds} с.`");
+//                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "возврат" && x.ProjectId == store.Id).ToList();
 
-            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+//                    var cards = context?.Cards
+//                           .Include(x => x.Photos)?
+//                           .Include(X => X.Sizes)?
+//                           .Where(x => x.ProjectId == store.Id).ToList();
 
-            await EditMessage(message, _text);
+//                    var orders = context?.rise_orders
+//                        .Where(x => x.ProjectId == store.Id).ToList();
 
-            return result;
-        }
+//                    var _cardsReturns = orders
+//                    ?.Where(x => x.IsOrdered && !x.IsCancel)
+//                ?.Where(x => list.Any(y => y.Srid == x.Srid))
+//                    ?.Select(x => new rise_cardreturn
+//                    {
+//                        Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
+
+//                        Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
+
+//                        Order_dt = x.Date,
+
+//                        Barcode = x.Barcode,
+//                        NmId = x.NmId,
+//                        Sa_name = x.SupplierArticle,
+
+//                        Ts_name = x.TechSize,
+//                        TotalPriceDiscount = x.TotalPriceDiscount,
+//                        ProjectId = store.Id
+//                    });
+
+//                    return _cardsReturns.ToList();
+//                }
+//                catch (Exception ex)
+//                {
+
+//                    throw;
+//                }
+
+//            });
+
+//            if (result.Count > 0)
+//            {
+//                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
+//                {
+//                    connection.Open();
+
+//                    var bulk = new BulkOperation<rise_cardreturn>(connection)
+//                    {
+//                        DestinationTableName = "rise_cardsreturns"
+//                    };
+
+//                    await bulk.BulkInsertAsync(result);
+//                    connection.Close();
+//                }
+//            }
+
+//            stopwatch.Stop();
+
+//            TimeSpan elapsed = stopwatch.Elapsed;
+//            int hours = elapsed.Hours;
+//            int minutes = elapsed.Minutes;
+//            int seconds = elapsed.Seconds;
+
+
+//            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+//🆕 Загружено строк `{result.Count} шт.`
+//⏱️ Время загрузки возвращенных товаров `{hours} ч {minutes} м. {seconds} с.`");
+
+//            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
+//                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
+
+//            await EditMessage(message, _text);
+
+//            return result;
+//        }
 
         //        /// <summary>
         //        /// Без статуса товары

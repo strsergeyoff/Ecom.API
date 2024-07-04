@@ -9,7 +9,7 @@ namespace Ecom.API.Jobs
         public async Task Execute(IJobExecutionContext context)
         {
             await dataRepository.LoadOrders();
-            //await dataRepository.LoadReportDetails();
+            await dataRepository.LoadReportDetails();
         }
     }
 }
