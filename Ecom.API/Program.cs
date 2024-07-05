@@ -116,22 +116,6 @@ builder.Services.AddQuartz(q =>
     );
     #endregion
 
-    #region Отчеты
-
-    var jobKeyLoadReportDetails = new JobKey("LoadReportDetails");
-    q.AddJob<LoadReportDetails>(opts => opts.WithIdentity(jobKeyLoadReportDetails));
-
-    q.AddTrigger(opts => opts
-   .ForJob(jobKeyLoadReportDetails)
-   .WithIdentity($"{jobKeyLoadReportDetails}-trigger-now")
-   .StartNow()
-   .WithSimpleSchedule(x => x
-   .WithIntervalInMinutes(30)
-   .RepeatForever()
-   .Build())
-   );
-    #endregion
-
     #region Юнит
 
     var jobKeyLoadUnits = new JobKey("LoadUnits");
