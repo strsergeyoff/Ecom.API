@@ -17,11 +17,16 @@ namespace Ecom.API.Services
 {
     public class DataRepository : IDataRepository
     {
-        private readonly ApplicationDbContext context;
-        private readonly ITelegramBotClient telegramBot;
+        #region Поля и свойства
+
         private readonly string ConnectionMySQL = "Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F;Charset=utf8";
+        private readonly string DateFrom = "2024-01-29";
 
         private const string WbSmallImageUrlTemplate = "https://basket-#id#.wb.ru/vol#count4#/part#count6#/#article#/images/tm/#number#.jpg";
+
+        private readonly ApplicationDbContext _context;
+        private readonly ITelegramBotClient _telegramBot;
+        private readonly IHttpClientFactory _httpClientFactory;
 
         public Dictionary<int, List<string>> MessageIncomes { get; set; } = new Dictionary<int, List<string>>();
         public Dictionary<int, List<string>> MessageStocks { get; set; } = new Dictionary<int, List<string>>();
@@ -32,14 +37,21 @@ namespace Ecom.API.Services
         public Dictionary<int, List<string>> MessageReportDetails { get; set; } = new Dictionary<int, List<string>>();
         public Dictionary<int, List<string>> MessageUnits { get; set; } = new Dictionary<int, List<string>>();
         public Dictionary<int, List<string>> MessageCompetitors { get; set; } = new Dictionary<int, List<string>>();
+        #endregion
 
-        public DataRepository(ApplicationDbContext _context, ITelegramBotClient _telegramBot)
+
+        #region Конструктор по умолчанию
+
+        public DataRepository(ApplicationDbContext context, ITelegramBotClient telegramBot, IHttpClientFactory httpClientFactory)
         {
-            context = _context;
-            telegramBot = _telegramBot;
+            _context = context;
+            _telegramBot = telegramBot;
+            _httpClientFactory = httpClientFactory;
 
-            telegramBot.StartReceiving(HandleUpdateAsync, HandleErrorAsync);
+            _telegramBot.StartReceiving(HandleUpdateAsync, HandleErrorAsync);
         }
+        #endregion
+
 
         #region Другое
         public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
@@ -99,17 +111,6 @@ namespace Ecom.API.Services
         {
         }
 
-        async Task EditMessage(Message message, string newText)
-        {
-
-            await telegramBot.EditMessageTextAsync(
-                    chatId: message.Chat.Id,
-                    messageId: message.MessageId,
-                    text: newText,
-                    parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown
-                );
-        }
-
         private static List<string> SplitToPages(string longMessage, int pageSize)
         {
             List<string> pages = new List<string>();
@@ -132,14 +133,12 @@ namespace Ecom.API.Services
             int incomesCount = 0;
             int _stores = 0;
             int error = 0;
-            var stores = context.rise_projects.ToList();
+            var stores = _context.rise_projects.ToList();
 
 
-            var messageIncomes = await telegramBot.SendTextMessageAsync("740755376", "Загрузка поставок", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+            var messageIncomes = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка поставок", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageIncomes.Add(messageIncomes.MessageId, new List<string>());
-
-            MessageIncomes[messageIncomes.MessageId].Add("Загрузка поставок");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -153,7 +152,7 @@ namespace Ecom.API.Services
                     Stopwatch stopwatch = new Stopwatch();
                     stopwatch.Start();
 
-                    DateTime? lastOrder = context?.Incomes?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate);
+                    DateTime? lastOrder = _context?.Incomes?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate);
                     var incomes = await FetchIncomesFromApi(store, lastOrder);
 
                     if (incomes.Count > 0)
@@ -229,7 +228,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task<List<Income>> FetchIncomesFromApi(rise_project store, DateTime? lastIncome)
         {
-            string dateFrom = lastIncome is null ? "?dateFrom=2023-01-29" : "?dateFrom=" + lastIncome.Value.ToString("yyyy-MM-ddTHH:mm:ss");
+            string dateFrom = lastIncome is null ? $"?dateFrom={DateFrom}" : "?dateFrom=" + lastIncome.Value.ToString("yyyy-MM-ddTHH:mm:ss");
             List<Income> Incomes = new List<Income>();
 
             try
@@ -295,14 +294,13 @@ namespace Ecom.API.Services
             int _stores = 0;
             int error = 0;
 
-            var stores = context.rise_projects.ToList();
+            var stores = _context.rise_projects.ToList();
 
-            var messageStocks = await telegramBot.SendTextMessageAsync("740755376",
+            var messageStocks = await _telegramBot.SendTextMessageAsync("740755376",
                 "Загрузка склада",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageStocks.Add(messageStocks.MessageId, new List<string>());
-            MessageStocks[messageStocks.MessageId].Add("Загрузка склада");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -317,7 +315,7 @@ namespace Ecom.API.Services
                     Stopwatch stopwatch = new Stopwatch();
                     stopwatch.Start();
 
-                    List<Stock> Stocks = context?.Stocks?.Where(x => x.ProjectId == store.Id).ToList();
+                    List<Stock> Stocks = _context?.Stocks?.Where(x => x.ProjectId == store.Id).ToList();
                     List<Stock> stocks = await FetchStocksFromApi(store);
 
                     if (stocks.Count > 0)
@@ -398,7 +396,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task<List<Stock>> FetchStocksFromApi(rise_project store)
         {
-            string dateFrom = "?dateFrom=2023-01-29";
+            string dateFrom = $"?dateFrom={DateFrom}";
             List<Stock> stocks = new List<Stock>();
 
             using (var httpClient = new HttpClient())
@@ -437,104 +435,135 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadOrders()
         {
-            int newRow = 0;
-            int _stores = 0;
-            int error = 0;
+            int newRowCount = 0;
+            int foreachStoresCount = 0;
+            int errors = 0;
 
-            var stores = context.rise_projects.ToList();
+            Stopwatch globalStopwatch = new Stopwatch();
+            Stopwatch privateStopwatch = new Stopwatch();
 
-            var messageOrders = await telegramBot.SendTextMessageAsync("740755376", "Загрузка заказов", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+            var stores = _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList();
 
-            MessageOrders.Add(messageOrders.MessageId, new List<string>());
+            var messageOrders = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка заказов",
+                parseMode: ParseMode.Markdown);
 
-            MessageOrders[messageOrders.MessageId].Add("Загрузка заказов");
+            globalStopwatch.Start();
 
-            Stopwatch _stopwatch = new Stopwatch();
-            _stopwatch.Start();
 
             foreach (var store in stores)
             {
-                if (string.IsNullOrWhiteSpace(store?.Token) || store?.Token?.Length < 155 || store.Deleted.Value == true) continue;
 
-                _stores++;
+                foreachStoresCount++;
+
                 try
                 {
-                    Stopwatch stopwatch = new Stopwatch();
-                    stopwatch.Start();
 
-                    DateTime? lastOrder = context?.rise_orders?.Where(x => x.ProjectId == store.Id)?
-                        .OrderBy(x => x.Date)?
-                        .LastOrDefault()
-                        ?.Date;
+                    privateStopwatch.Start();
+
+                    DateTime? lastOrder = await _context?.rise_orders
+                        ?.Where(x => x.ProjectId == store.Id)
+                        ?.MaxAsync(x => x.Date);
 
                     var orders = await FetchOrdersFromApi(store, lastOrder);
-
+                    newRowCount += orders.Count;
 
                     if (orders.Count > 0)
-                    {
-                        newRow += orders.Count;
-                        using (var connection = new MySqlConnection(ConnectionMySQL))
-                        {
-                            connection.Open();
+                        await BulkInsertEntitiesAsync(orders, "rise_orders");
 
-                            var bulk = new BulkOperation<rise_order>(connection)
-                            {
-                                DestinationTableName = "rise_orders"
-                            };
+                    privateStopwatch.Stop();
+                    TimeSpan elapsed = privateStopwatch.Elapsed;
 
-                            await bulk.BulkInsertAsync(orders);
-                            connection.Close();
-                        }
-                    }
-
-                    stopwatch.Stop();
-                    TimeSpan elapsed = stopwatch.Elapsed;
-                    int hours = elapsed.Hours;
-                    int minutes = elapsed.Minutes;
-                    int seconds = elapsed.Seconds;
-
-                    MessageOrders[messageOrders.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageOrders, MessageOrders, @$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{orders.Count} шт.`
-⏱️ Время загрузки заказов `{hours} ч {minutes} м. {seconds} с.`");
+⏱️ Время загрузки заказов `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
 
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageOrders.Where(kv => kv.Key == messageOrders.MessageId).SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageOrders, _text);
-
-                    //await FetchCardDispatchedAsync(store, orders, messageOrders);
                 }
-
                 catch (Exception ex)
                 {
-                    error++;
+                    errors++;
 
-                    MessageOrders[messageOrders.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageOrders, MessageOrders, @$"🏦 Магазин `{store.Title}`
 ```{ex.Message.ToString()}```");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageOrders.Where(kv => kv.Key == messageOrders.MessageId).SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageOrders, _text);
                 }
             }
 
-            _stopwatch.Stop();
+            globalStopwatch.Stop();
 
-            TimeSpan _elapsed = _stopwatch.Elapsed;
-            int _hours = _elapsed.Hours;
-            int _minutes = _elapsed.Minutes;
-            int _seconds = _elapsed.Seconds;
-            MessageOrders[messageOrders.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
-🆕 Загружено строк `{newRow} шт.`
-⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
+            TimeSpan _elapsed = globalStopwatch.Elapsed;
 
-            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}", MessageOrders.Where(kv => kv.Key == messageOrders.MessageId).SelectMany(kv => kv.Value));
-
-            await EditMessage(messageOrders, text);
+            await InsertAndEditMessage(messageOrders, MessageOrders, $@"✅ Успешно: `{foreachStoresCount - errors} из {foreachStoresCount}`
+🆕 Загружено строк `{newRowCount} шт.`
+⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
             MessageOrders.Clear();
         }
+
+        /// <summary>
+        /// Добавление сообщения в список и изменение в телеграме
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="keyValues"></param>
+        /// <param name="newText"></param>
+        /// <returns></returns>
+        private async Task InsertAndEditMessage(Message message, Dictionary<int, List<string>> keyValues, string newText)
+        {
+            if(!keyValues.ContainsKey(message.MessageId))
+                keyValues.Add(message.MessageId, new List<string>());
+
+            keyValues[message.MessageId].Add(newText);
+
+            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
+                keyValues.Where(kv => kv.Key == message.MessageId)
+                .SelectMany(kv => kv.Value));
+
+            await EditMessage(message, text);
+        }
+
+
+        /// <summary>
+        /// Редактирование сообщения в телеграм
+        /// </summary>
+        /// <param name="message">Телеграм сообщение</param>
+        /// <param name="newText">Новое сообщение</param>
+        /// <returns></returns>
+       public async Task EditMessage(Message message, string newText)
+        {
+
+            await _telegramBot.EditMessageTextAsync(
+                    chatId: message.Chat.Id,
+                    messageId: message.MessageId,
+                    text: message.Text + Environment.NewLine + newText,
+                    parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+        }
+
+
+        /// <summary>
+        /// Массовое сохранение данных в базу данных
+        /// </summary>
+        /// <typeparam name="T">Сущность</typeparam>
+        /// <param name="entities">Список сущностей</param>
+        /// <param name="tableName">Таблица для сохранения в базе данных</param>
+        /// <returns></returns>
+        private async Task BulkInsertEntitiesAsync<T>(List<T> entities, string tableName) where T : class
+        {
+            using (var connection = new MySqlConnection(ConnectionMySQL))
+            {
+                await connection.OpenAsync();
+
+                var bulk = new BulkOperation<T>(connection)
+                {
+                    DestinationTableName = tableName
+                };
+
+                await bulk.BulkInsertAsync(entities);
+                await connection.CloseAsync();
+            }
+        }
+
 
 
         /// <summary>
@@ -547,140 +576,80 @@ namespace Ecom.API.Services
         /// <param name="store">Магазин</param>
         /// <param name="lastOrder">Последний заказ</param>
         /// <returns></returns>
-
+        /// 
         public async Task<List<rise_order>> FetchOrdersFromApi(rise_project store, DateTime? lastOrder)
         {
-            string dateFrom = lastOrder is null ? "?dateFrom=2023-01-29"
-                : "?dateFrom=" + lastOrder.Value.ToString("yyyy-MM-ddTHH:mm:ss");
+            var orders = new List<rise_order>();
+            var httpClient = _httpClientFactory.CreateClient();
 
-            List<rise_order> orders = new List<rise_order>();
-            do
+            string dateFrom = lastOrder?.ToString("yyyy-MM-ddTHH:mm:ss") ?? DateFrom;
+            string apiUrlBase = "https://statistics-api.wildberries.ru/api/v1/supplier/orders?dateFrom=";
+
+            bool fetchMore = true;
+            while (fetchMore)
             {
-
                 try
                 {
-                    using (var httpClient = new HttpClient())
+                    string apiUrl = apiUrlBase + dateFrom;
+                    var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                    requestMessage.Headers.Add("contentType", "application/json");
+                    requestMessage.Headers.Add("Authorization", store.Token);
+
+                    HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
+
+                    if (response.IsSuccessStatusCode)
                     {
+                        string responseContent = await response.Content.ReadAsStringAsync();
+                        var fetchedOrders = JsonConvert.DeserializeObject<List<rise_order>>(responseContent);
 
-                        var apiUrl = $"https://statistics-api.wildberries.ru/api/v1/supplier/orders{dateFrom}";
+                        fetchedOrders = fetchedOrders?.Where(x => lastOrder == null || x.Date > lastOrder)?.ToList();
 
-                        var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                        requestMessage.Headers.Add("contentType", "application/json");
-                        requestMessage.Headers.Add("Authorization", store.Token);
-
-                        HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
-
-                        if (response.IsSuccessStatusCode)
+                        foreach (var order in fetchedOrders)
                         {
-                            string responseContent = await response.Content.ReadAsStringAsync();
+                            order.ProjectId = store.Id;
+                        }
 
-                            if (lastOrder is not null)
-                                orders.AddRange(JsonConvert.DeserializeObject<List<rise_order>>(responseContent)?.Where(x => x.Date > lastOrder)?.ToList());
-                            else
-                                orders.AddRange(JsonConvert.DeserializeObject<List<rise_order>>(responseContent)?.ToList());
+                        orders.AddRange(fetchedOrders);
 
-                            foreach (var order in orders)
-                                order.ProjectId = store.Id;
+                        var lastFetchedDate = fetchedOrders.Max(x => x?.LastChangeDate.Value)?.Date;
 
-                            var data = orders?.Max(x => x?.LastChangeDate.Value)?.Date;
-
-                            if (data is null) break;
-
-                            if (data != DateTime.Now.Date)
-                            {
-                                dateFrom = "?dateFrom=" + data?.ToString("yyyy-MM-ddTHH:mm:ss");
-                                await Task.Delay(TimeSpan.FromMinutes(1));
-                            }
+                        if (lastFetchedDate == null || lastFetchedDate == DateTime.Now.Date)
+                        {
+                            fetchMore = false;
+                        }
+                        else
+                        {
+                            dateFrom = lastFetchedDate.Value.ToString("yyyy-MM-ddTHH:mm:ss");
+                            await Task.Delay(TimeSpan.FromMinutes(1)); // Управление частотой запросов
                         }
                     }
-
+                    else
+                    {
+                        fetchMore = false; // Прекратить попытки при неудачном статусе ответа
+                    }
                 }
-                catch
+                catch (HttpRequestException ex)
                 {
-
+                    // Обработка ошибок связанных с HTTP-запросом
+                    break;
                 }
-            } while (orders?.Max(x => x?.LastChangeDate.Value.Date) != DateTime.Now.Date);
+                catch (System.Text.Json.JsonException ex)
+                {
+                    // Обработка ошибок десериализации JSON
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    // Другие специфические исключения
+                    break;
+                }
+                
+            }
+
             return orders;
         }
 
 
-
-
-        //        /// <summary>
-        //        /// Отправленные
-        //        /// </summary>
-        //        /// <returns></returns>
-        //        private async Task<List<rise_carddispatched>> FetchCardDispatchedAsync(rise_project store, List<rise_order> _orders, Message message)
-        //        {
-        //            Stopwatch stopwatch = new Stopwatch();
-        //            stopwatch.Start();
-
-        //            var result = await Task.Run(async () =>
-        //            {
-
-        //                var cards = context?.Cards
-        //                       .Where(x => x.ProjectId == store.Id)
-        //                       .Include(x => x.Photos)?
-        //                       .Include(X => X.Sizes)?.ToList();
-
-        //                var orders = _orders.Where(x => x.ProjectId == store.Id && !string.IsNullOrEmpty(x.Srid) && !x.IsCancel).ToList();
-
-        //                var dispatchedOrders = orders
-        //                ?.Select(x => new rise_carddispatched
-        //                {
-        //                    Srid = x.Srid,
-        //                    Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
-        //                    Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
-        //                    Order_dt = x.Date,
-        //                    Barcode = x.Barcode,
-        //                    NmId = x.NmId,
-        //                    Sa_name = x.SupplierArticle,
-        //                    Ts_name = x.TechSize,
-        //                    TotalPriceDiscount = x.TotalPriceDiscount,
-        //                    ProjectId = store.Id
-        //                });
-
-        //                return dispatchedOrders.ToList();
-
-        //            });
-
-
-        //            if (result.Count > 0)
-        //            {
-        //                using (var connection = new MySqlConnection(ConnectionMySQL))
-        //                {
-        //                    connection.Open();
-
-        //                    var bulk = new BulkOperation<rise_carddispatched>(connection)
-        //                    {
-        //                        DestinationTableName = "rise_cardsdispatched"
-        //                    };
-
-        //                    await bulk.BulkInsertAsync(result);
-        //                    connection.Close();
-        //                }
-        //            }
-
-        //            stopwatch.Stop();
-
-        //            TimeSpan elapsed = stopwatch.Elapsed;
-        //            int hours = elapsed.Hours;
-        //            int minutes = elapsed.Minutes;
-        //            int seconds = elapsed.Seconds;
-
-
-        //            MessageOrders[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-        //🆕 Загружено строк `{result.Count} шт.`
-        //⏱️ Время загрузки отправленных товаров `{hours} ч {minutes} м. {seconds} с.`");
-
-        //            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-        //                MessageOrders.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
-
-        //            await EditMessage(message, _text);
-
-        //            return result;
-
-        //        }
         #endregion
 
         #region Отчет
@@ -691,97 +660,61 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadReportDetails()
         {
-            int _stores = 0;
+            int storeCount = 0;
             int error = 0;
 
-            var stores = context.rise_projects.ToList();
+            var stores = _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList();
 
-            var messageReportDetails = await telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов и ленты товаров",
+            var messageReportDetails = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов и ленты товаров",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
-
-            MessageReportDetails.Add(messageReportDetails.MessageId, new List<string>());
-
-            MessageReportDetails[messageReportDetails.MessageId].Add("Загрузка отчетов и ленты товаров");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
 
             foreach (var store in stores)
             {
-                if (string.IsNullOrWhiteSpace(store?.Token) || store?.Token?.Length < 155 || store.Deleted.Value == true) continue;
 
-                _stores++;
+                storeCount++;
 
                 try
                 {
                     Stopwatch stopwatch = new Stopwatch();
                     stopwatch.Start();
 
-                    DateTime? lastDate = context?.ReportDetails?.Where(x => x.ProjectId == store.Id)?.Max(x => x.Date_to);
+                    DateTime? lastDate = _context?.ReportDetails?.Where(x => x.ProjectId == store.Id)?.Max(x => x.Create_dt);
                     var reportDetails = await FetchReportDetailsFromApi(store, lastDate);
 
                     if (reportDetails.Count > 0)
-                    {
-                        using (var connection = new MySqlConnection(ConnectionMySQL))
-                        {
-                            connection.Open();
-
-                            var bulk = new BulkOperation<ReportDetail>(connection)
-                            {
-                                DestinationTableName = "ReportDetails"
-                            };
-
-                            await bulk.BulkInsertAsync(reportDetails);
-                            connection.Close();
-                        }
-                    }
+                            await BulkInsertEntitiesAsync(reportDetails, "ReportDetails");
 
                     stopwatch.Stop();
 
                     TimeSpan elapsed = stopwatch.Elapsed;
-                    int hours = elapsed.Hours;
-                    int minutes = elapsed.Minutes;
-                    int seconds = elapsed.Seconds;
 
-
-                    MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageReportDetails, MessageReportDetails, @$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{reportDetails.Count} шт.`
-⏱️ Время загрузки отчета `{hours} ч {minutes} м. {seconds} с.`");
+⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
 
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageReportDetails.Where(kv => kv.Key == messageReportDetails.MessageId).SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageReportDetails, _text);
-
-                    await DataAnalysisForCardsFeedsAsync(store, messageReportDetails);
+                    //await DataAnalysisForCardsFeedsAsync(store, messageReportDetails);
                 }
                 catch (Exception ex)
                 {
                     error++;
-
-                    MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageReportDetails, MessageReportDetails, @$"🏦 Магазин `{store.Title}`
 ```{ex.Message.ToString()}```");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageReportDetails.Where(kv => kv.Key == messageReportDetails.MessageId).SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageReportDetails, _text);
                 }
             }
 
             _stopwatch.Stop();
 
             TimeSpan _elapsed = _stopwatch.Elapsed;
-            int _hours = _elapsed.Hours;
-            int _minutes = _elapsed.Minutes;
-            int _seconds = _elapsed.Seconds;
-            MessageReportDetails[messageReportDetails.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
-⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
 
-            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}", MessageReportDetails.Where(kv => kv.Key == messageReportDetails.MessageId).SelectMany(kv => kv.Value));
-
-            await EditMessage(messageReportDetails, text);
-
+            await InsertAndEditMessage(messageReportDetails, MessageReportDetails, $@"✅ Успешно: `{storeCount - error} из {storeCount}`
+⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
             MessageReportDetails.Clear();
         }
@@ -796,66 +729,93 @@ namespace Ecom.API.Services
         /// <param name="store">Магазин</param>
         /// <param name="lastDate">Последняя дата обновления</param>
         /// <returns></returns>
-        private async Task<List<ReportDetail>> FetchReportDetailsFromApi(rise_project store, DateTime? lastDate)
+        public async Task<List<ReportDetail>> FetchReportDetailsFromApi(rise_project store, DateTime? lastDate)
         {
-            string date = lastDate is null ? $"?dateFrom=2024-01-29&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}"
-                : $"?dateFrom={lastDate.Value.AddSeconds(1).ToString("yyyy-MM-dd")}&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
+            var reportDetails = new List<ReportDetail>();
+            var httpClient = _httpClientFactory.CreateClient();
 
-            List<ReportDetail> reportDetails = new List<ReportDetail>();
+            string dateFrom = lastDate.HasValue ? lastDate.Value.AddDays(1).ToString("yyyy-MM-dd") : DateFrom;
+            string rrdid = "0";
+            string dateTo = DateTime.Now.Date.ToString("yyyy-MM-dd");
 
-            bool IsNext = true;
 
+            bool fetchMore = true;
 
-            try
+            while (fetchMore)
             {
-                do
+                try
                 {
-                    var apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod{date}";
+                    string apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod?dateFrom={dateFrom}&rrdid={rrdid}&dateTo={dateTo}";
 
+                    var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                    requestMessage.Headers.Add("contentType", "application/json");
+                    requestMessage.Headers.Add("Authorization", store.Token);
 
-                    using (var httpClient = new HttpClient())
+                    HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
+
+                    if (response.IsSuccessStatusCode)
                     {
-                        var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                        requestMessage.Headers.Add("contentType", "application/json");
-                        requestMessage.Headers.Add("Authorization", store.Token);
+                        string responseContent = await response.Content.ReadAsStringAsync();
+                        var fetchedReportDetails = JsonConvert.DeserializeObject<List<ReportDetail>>(responseContent) ?? new List<ReportDetail>();
 
-                        HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
+                        foreach (var reportDetail in fetchedReportDetails)
+                            reportDetail.ProjectId = store.Id;
 
-                        if (response.IsSuccessStatusCode)
+                        if (fetchedReportDetails is not null && fetchedReportDetails.Count > 0)
+                            reportDetails.AddRange(fetchedReportDetails);
+
+                        if (fetchedReportDetails is not null && fetchedReportDetails.Count > 0)
                         {
-                            string responseContent = await response.Content.ReadAsStringAsync();
+                            DateTime? lastReportDetail = fetchedReportDetails?.Max(x => x.Create_dt);
 
-                            var list = JsonConvert.DeserializeObject<List<ReportDetail>>(responseContent);
+                            if (lastReportDetail != GetMonday(DateTime.Today.Date).Date)
+                            {
+                                dateFrom = lastReportDetail?.ToString("yyyy-MM-dd");
+                                rrdid = fetchedReportDetails?.LastOrDefault()?.Rrd_id.ToString();
 
-                            if (list is not null)
-                                reportDetails.AddRange(list);
-
-                            foreach (var rd in reportDetails)
-                                rd.ProjectId = store.Id;
+                                await Task.Delay(TimeSpan.FromMinutes(1));
+                            }
+                            else
+                                fetchMore = false;
                         }
-                    }
+                        else
+                            fetchMore = false;
 
-
-                    var data = reportDetails.Max(x => x.Create_dt);
-                    var rrdid = reportDetails.LastOrDefault().Rrd_id;
-
-                    if (reportDetails.Count > 0)
-                    {
-                        IsNext = true;
-                        date = $"?dateFrom={data.Value.AddSeconds(1).ToString("yyyy-MM-dd")}&rrdid={rrdid}&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
                     }
                     else
-                        IsNext = false;
+                        fetchMore = false; // Прекратить попытки при неудачном статусе ответа
+                }
+                catch (HttpRequestException ex)
+                {
+                    // Обработка ошибок связанных с HTTP-запросом
+                    break;
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    // Обработка ошибок десериализации JSON
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    // Другие специфические исключения
+                    break;
+                }
 
-                } while (IsNext);
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.InnerException.ToString());
-            }
-
 
             return reportDetails;
+        }
+
+        public static DateTime GetMonday(DateTime date)
+        {
+            // Получаем день недели (0 - воскресенье, 6 - суббота)
+            int dayOfWeek = (int)date.DayOfWeek;
+
+            // Вычисляем разницу между текущим днем и понедельником
+            int daysToMonday = (dayOfWeek == 0) ? -6 : 1 - dayOfWeek;
+
+            // Возвращаем дату понедельника
+            return date.AddDays(daysToMonday);
         }
         #endregion
 
@@ -871,14 +831,13 @@ namespace Ecom.API.Services
             int _stores = 0;
             int error = 0;
 
-            var stores = context.rise_projects.ToList();
+            var stores = _context.rise_projects.ToList();
 
-            var messageSales = await telegramBot.SendTextMessageAsync("740755376",
+            var messageSales = await _telegramBot.SendTextMessageAsync("740755376",
                 "Загрузка продаж",
                 parseMode: ParseMode.Markdown);
 
             MessageSales.Add(messageSales.MessageId, new List<string>());
-            MessageSales[messageSales.MessageId].Add("Загрузка продаж");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -891,7 +850,7 @@ namespace Ecom.API.Services
                     _stores++;
                     Stopwatch stopwatch = new Stopwatch();
                     stopwatch.Start();
-                    DateTime? lastSale = context?.Sales?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate);
+                    DateTime? lastSale = _context?.Sales?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate);
 
                     var sales = await FetchSalesFromApi(store, lastSale);
 
@@ -979,7 +938,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task<List<Sale>> FetchSalesFromApi(rise_project store, DateTime? lastSale)
         {
-            string dateFrom = lastSale is null ? "?dateFrom=2023-01-29" : "?dateFrom=" + lastSale.Value.ToString("yyyy-MM-ddTHH:mm:ss");
+            string dateFrom = lastSale is null ? $"?dateFrom={DateFrom}" : "?dateFrom=" + lastSale.Value.ToString("yyyy-MM-ddTHH:mm:ss");
             List<Sale> sales = new List<Sale>();
 
             try
@@ -1042,7 +1001,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadUnits()
         {
-            var stores = context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
+            var stores = _context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
             && x.Token.Length > 155
             && x.Deleted.Value == false).ToList();
 
@@ -1050,12 +1009,10 @@ namespace Ecom.API.Services
             int unitsCount = 0;
             int _stores = 0;
             int error = 0;
-            var messageUnits = await telegramBot.SendTextMessageAsync("740755376", "Загрузка юнит",
+            var messageUnits = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка юнит",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageUnits.Add(messageUnits.MessageId, new List<string>());
-
-            MessageUnits[messageUnits.MessageId].Add("Загрузка юнит");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -1068,7 +1025,7 @@ namespace Ecom.API.Services
                     Stopwatch stopwatch = new Stopwatch();
                     stopwatch.Start();
 
-                    var _units = context.rise_units.ToList();
+                    var _units = _context.rise_units.ToList();
 
                     var units = await FetchUnitFromApi(store);
 
@@ -1094,7 +1051,7 @@ namespace Ecom.API.Services
                         }
 
                     }
-                    await context.SaveChangesAsync();
+                    await _context.SaveChangesAsync();
 
                     var uniqueUnits = new List<rise_unit>();
 
@@ -1109,8 +1066,8 @@ namespace Ecom.API.Services
                     }
                     if (uniqueUnits.Count > 0)
                     {
-                        await context.rise_units.AddRangeAsync(uniqueUnits);
-                        unitsCount += await context.SaveChangesAsync();
+                        await _context.rise_units.AddRangeAsync(uniqueUnits);
+                        unitsCount += await _context.SaveChangesAsync();
                     }
 
                     stopwatch.Stop();
@@ -1242,12 +1199,12 @@ namespace Ecom.API.Services
 
                         foreach (var good in goodsList)
                         {
-                            var comission = context.ReportDetails
+                            var comission = _context.ReportDetails
                                                ?.Where(x => x.Supplier_oper_name!.ToLower() == "продажа" && x.Commission_percent.HasValue)
                                                ?.Where(x => x.Commission_percent > 0)
                                                ?.Where(x => x.Nm_id == good.nmID);
 
-                            var delivery = context.ReportDetails
+                            var delivery = _context.ReportDetails
                                  ?.Where(x => x.Supplier_oper_name!.ToLower() == "логистика" && x.Delivery_rub.HasValue)
                                  ?.Where(x => x.Delivery_rub.Value > 0)
                                  ?.Where(x => x.Nm_id == good.nmID);
@@ -1257,7 +1214,7 @@ namespace Ecom.API.Services
                                 Url = GetWbImageUrl(good.nmID.ToString()),
                                 Sa_name = good.vendorCode,
                                 NmID = good.nmID,
-                                Ordered_today = context.rise_orders
+                                Ordered_today = _context.rise_orders
            .Where(x => x.Date != null && x.ProjectId == store.Id)
            .Where(x => x.Date.Value.Date == DateTime.Now.Date) // Сравниваем только даты
            .Where(x => x.NmId == good.nmID)
@@ -1339,7 +1296,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadCompetitors()
         {
-            var stores = context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
+            var stores = _context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
              && x.Token.Length > 155
              && x.Deleted.Value == false).ToList();
 
@@ -1347,12 +1304,11 @@ namespace Ecom.API.Services
             int CompetitorsCount = 0;
             int _stores = 0;
             int error = 0;
-            var messageCompetitors = await telegramBot.SendTextMessageAsync("740755376", "Загрузка конкурентов",
+            var messageCompetitors = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка конкурентов",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageCompetitors.Add(messageCompetitors.MessageId, new List<string>());
 
-            MessageCompetitors[messageCompetitors.MessageId].Add("Загрузка конкурентов");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -1365,7 +1321,7 @@ namespace Ecom.API.Services
                     Stopwatch stopwatch = new Stopwatch();
                     stopwatch.Start();
 
-                    var competit = context.rise_competitors.Where(x => x.ProjectId == store.Id).ToList();
+                    var competit = _context.rise_competitors.Where(x => x.ProjectId == store.Id).ToList();
                     await GetCompetitorsUpdateFromApi(competit);
 
                     var result = await GetCompetitorsFromApi(store);
@@ -1433,7 +1389,7 @@ namespace Ecom.API.Services
         {
             try
             {
-                List<rise_competitor> competitors = context.rise_competitors.Where(x => x.ProjectId == store.Id)
+                List<rise_competitor> competitors = _context.rise_competitors.Where(x => x.ProjectId == store.Id)
                    .Include(x => x.Statistics)
                    .Where(c => !c.Statistics.Any(s => s.Date == DateTime.Today.Date))
                    .ToList();
@@ -1472,11 +1428,11 @@ namespace Ecom.API.Services
                                 InStock = firstStockQty
                             };
 
-                            var com = await context.rise_competitors.FirstOrDefaultAsync(x => x.nmId == (int)row["id"]);
+                            var com = await _context.rise_competitors.FirstOrDefaultAsync(x => x.nmId == (int)row["id"]);
                             if (com is not null)
                             {
                                 com.Statistics.Add(stat);
-                                await context.SaveChangesAsync();
+                                await _context.SaveChangesAsync();
                             }
                             rowadd++;
                         }
@@ -1521,7 +1477,7 @@ namespace Ecom.API.Services
                     foreach (var row in jsonArray)
                     {
 
-                        var compet = await context.rise_competitors.FirstOrDefaultAsync(x => x.nmId == (int)row["id"]);
+                        var compet = await _context.rise_competitors.FirstOrDefaultAsync(x => x.nmId == (int)row["id"]);
 
                         if (compet is not null)
                         {
@@ -1548,7 +1504,7 @@ namespace Ecom.API.Services
                                 });
                             }
 
-                            await context.SaveChangesAsync();
+                            await _context.SaveChangesAsync();
                         }
                     }
                 }
@@ -1565,7 +1521,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task CardsWildberries()
         {
-            var stores = context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
+            var stores = _context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
             && x.Token.Length > 155
             && x.Deleted.Value == false).ToList();
 
@@ -1573,12 +1529,10 @@ namespace Ecom.API.Services
             int cardsCount = 0;
             int _stores = 0;
             int error = 0;
-            var messageCards = await telegramBot.SendTextMessageAsync("740755376", "Загрузка карточек валбериз",
+            var messageCards = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка карточек валбериз",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageCards.Add(messageCards.MessageId, new List<string>());
-
-            MessageCards[messageCards.MessageId].Add("Загрузка карточек валбериз");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -1593,7 +1547,7 @@ namespace Ecom.API.Services
                     stopwatch.Start();
 
                     //Старые карточки
-                    List<Card> cardWildberriesOld = context.Cards.Where(x => x.ProjectId == store.Id)?.ToList();
+                    List<Card> cardWildberriesOld = _context.Cards.Where(x => x.ProjectId == store.Id)?.ToList();
 
                     //Новые карточки
                     List<Card> cardWildberriesNew = await FetchCardWildberriesFromApi(store);
@@ -1602,12 +1556,12 @@ namespace Ecom.API.Services
                     if (cardWildberriesNew.Count > 0)
                     {
                         cardsCount += cardWildberriesNew.Count;
-                        context?.Cards.RemoveRange(cardWildberriesOld);
-                        await context.SaveChangesAsync();
+                        _context?.Cards.RemoveRange(cardWildberriesOld);
+                        await _context.SaveChangesAsync();
 
 
-                        await context?.Cards.AddRangeAsync(cardWildberriesNew);
-                        await context.SaveChangesAsync();
+                        await _context?.Cards.AddRangeAsync(cardWildberriesNew);
+                        await _context.SaveChangesAsync();
                     }
 
                     stopwatch.Stop();
@@ -1777,17 +1731,17 @@ namespace Ecom.API.Services
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            var reportDetails = context?.ReportDetails?.Where(x => x.ProjectId == store.Id).ToList();
+            var reportDetails = _context?.ReportDetails?.Where(x => x.ProjectId == store.Id).ToList();
 
-            var cards = context?.Cards
+            var cards = _context?.Cards
                 .Include(x => x.Photos)?
                 .Include(X => X.Sizes)?
                 .Where(x => x.ProjectId == store.Id)
                 .ToList();
 
-            var orders = context?.rise_orders?.Where(x => x.ProjectId == store.Id).ToList();
-            var stocks = context?.Stocks?.Where(x => x.ProjectId == store.Id).ToList();
-            var incomes = context?.Incomes?.Where(x => x.ProjectId == store.Id).ToList();
+            var orders = _context?.rise_orders?.Where(x => x.ProjectId == store.Id).ToList();
+            var stocks = _context?.Stocks?.Where(x => x.ProjectId == store.Id).ToList();
+            var incomes = _context?.Incomes?.Where(x => x.ProjectId == store.Id).ToList();
 
             List<rise_feed> cardFeeds = new List<rise_feed>();
 
@@ -1884,26 +1838,26 @@ namespace Ecom.API.Services
                                            CancelSummaPrice = orders?.Where(y => y.Barcode == x.Barcode && y.IsCancel).Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
 
                                            //Отправлены
-                                           DispatchCount = context?.rise_cardsdispatched?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
-                                           DispatchSummaPrice = context?.rise_cardsdispatched?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
+                                           DispatchCount = _context?.rise_cardsdispatched?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
+                                           DispatchSummaPrice = _context?.rise_cardsdispatched?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
 
                                            //Выкуплены
-                                           PurchasedCount = context?.rise_cardspurchaed?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Count(),
-                                           PurchasedSummaPrice = context?.rise_cardspurchaed?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
+                                           PurchasedCount = _context?.rise_cardspurchaed?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Count(),
+                                           PurchasedSummaPrice = _context?.rise_cardspurchaed?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
 
                                            //Возвращены
-                                           ReturnCount = context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
-                                           ReturnSummaPrice = context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
+                                           ReturnCount = _context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
+                                           ReturnSummaPrice = _context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
 
                                            //Без статуса
-                                           WitchStatusCount = context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
+                                           WitchStatusCount = _context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
 
                                            ProjectId = store.Id
                                        }).ToList();
 
             cardFeeds.AddRange(UniqProducts);
 
-            var _cardFeeds = context?.rise_feeds?.Where(x => x.ProjectId == store.Id).ToList();
+            var _cardFeeds = _context?.rise_feeds?.Where(x => x.ProjectId == store.Id).ToList();
 
             if (cardFeeds?.Count > 0)
             {
@@ -2221,7 +2175,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadAdverts()
         {
-            var stores = context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
+            var stores = _context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
            && x.Token.Length > 155
            && x.Deleted.Value == false).ToList();
 
@@ -2230,12 +2184,10 @@ namespace Ecom.API.Services
             int AdvertsStatCount = 0;
             int _stores = 0;
             int error = 0;
-            var messageAdverts = await telegramBot.SendTextMessageAsync("740755376", "Загрузка рекламных кампаний",
+            var messageAdverts = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка рекламных кампаний",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageAdverts.Add(messageAdverts.MessageId, new List<string>());
-
-            MessageAdverts[messageAdverts.MessageId].Add("Загрузка рекламных кампаний");
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -2254,7 +2206,7 @@ namespace Ecom.API.Services
                     var advertsList = await GetAdvertIdAsync(store);
 
                     //Полчение список рекламных кампаний в базе данных по магазину
-                    List<rise_advert> adverts = context?.rise_adverts?.Where(x => x.ProjectId == store.Id)?.ToList();
+                    List<rise_advert> adverts = _context?.rise_adverts?.Where(x => x.ProjectId == store.Id)?.ToList();
 
                     //Проверяем есть уникальные рекламные кампании загруженные
                     var uniqueAdverts = advertsList
@@ -2270,12 +2222,12 @@ namespace Ecom.API.Services
                             row.ProjectId = store.Id;
 
                         //Добавляем новые рекламные кампании и сохраняем в базу данных
-                        await context.rise_adverts.AddRangeAsync(uniqueAdverts);
-                        AdvertsCount += await context.SaveChangesAsync();
+                        await _context.rise_adverts.AddRangeAsync(uniqueAdverts);
+                        AdvertsCount += await _context.SaveChangesAsync();
                     }
 
                     //Загружаем обновленный список рекламных кампаний со статистикой
-                    List<rise_advert> advertslist = context.rise_adverts
+                    List<rise_advert> advertslist = _context.rise_adverts
                         .Where(x => store.Id == x.ProjectId)
                         .Include(z => z.AdvertsStatistics)
                         .ToList();
@@ -2303,7 +2255,7 @@ namespace Ecom.API.Services
                         //Загружаем список статистики
                         List<rise_advertstatistic> _advertslist = await GetFullStatAsync(
                             //Передаем токен
-                            store.Token,
+                            store,
                             //Пропускаем уже полученную статистику
                             advertslist.Skip(i * 100)
                             //Выбираем первые 100 по которым еще не получена статистика
@@ -2316,10 +2268,10 @@ namespace Ecom.API.Services
                         if (_advertslist is not null || _advertslist.Count > 0)
                         {
                             foreach (var row in _advertslist)
-                                row.Sa_name = context?.Cards?.FirstOrDefault(y => y.NmID == row.nmId)?.VendorCode ??
-                                    context?.ReportDetails?.FirstOrDefault(y => y.Nm_id == row.nmId)?.Sa_name ??
-                                    context?.Stocks?.FirstOrDefault(y => y.NmId == row.nmId)?.SupplierArticle ??
-                                    context?.rise_orders.FirstOrDefault(y => y.NmId == row.nmId)?.SupplierArticle;
+                                row.Sa_name = _context?.Cards?.FirstOrDefault(y => y.NmID == row.nmId)?.VendorCode ??
+                                    _context?.ReportDetails?.FirstOrDefault(y => y.Nm_id == row.nmId)?.Sa_name ??
+                                    _context?.Stocks?.FirstOrDefault(y => y.NmId == row.nmId)?.SupplierArticle ??
+                                    _context?.rise_orders.FirstOrDefault(y => y.NmId == row.nmId)?.SupplierArticle;
 
                             //Добавляем в общий список статистики
                             advertStatistics.AddRange(_advertslist);
@@ -2336,10 +2288,10 @@ namespace Ecom.API.Services
 
                     if (advertslist.Count > 0)
                         //Обновляем статистику
-                        context.rise_adverts.UpdateRange(advertslist);
+                        _context.rise_adverts.UpdateRange(advertslist);
 
 
-                    var result = await context?.SaveChangesAsync();
+                    var result = await _context?.SaveChangesAsync();
                     AdvertsStatCount += result;
 
                     stopwatch.Stop();
@@ -2406,18 +2358,18 @@ namespace Ecom.API.Services
         /// <param name="dateFrom">Дата начала</param>
         /// <param name="dateTo">Дата окончания</param>
         /// <returns></returns>
-        private async Task<List<rise_advertstatistic>> GetFullStatAsync(string token, List<rise_advert> adverts, bool isData)
+        private async Task<List<rise_advertstatistic>> GetFullStatAsync(rise_project store, List<rise_advert> adverts, bool isData)
         {
             List<rise_advertstatistic> advertStatistics = new List<rise_advertstatistic>();
             List<rise_advertstatistic> _advertStatistics = new List<rise_advertstatistic>();
-            var cards = context?.Cards.Where(x => x.ProjectId == adverts!.FirstOrDefault().ProjectId);
+            var cards = _context?.Cards.Where(x => x.ProjectId == adverts!.FirstOrDefault().ProjectId);
 
             try
             {
                 string apiUrl = "https://advert-api.wb.ru/adv/v2/fullstats";
 
 
-                DateTime date = !isData ? DateTime.Now.AddMonths(-2) : context.rise_advertsstatistics.Max(x => x.Date.Date);
+                DateTime date = !isData ? DateTime.Now.AddMonths(-2) : _context.rise_advertsstatistics.Max(x => x.Date.Date);
 
                 bool IsLoad = true;
 
@@ -2456,7 +2408,7 @@ namespace Ecom.API.Services
                         var hdr = new HttpRequestMessage(HttpMethod.Post, apiUrl);
                         hdr.Headers.Add("contentType", "application/json");
                         hdr.Content = jsonContent;
-                        hdr.Headers.Add("Authorization", token);
+                        hdr.Headers.Add("Authorization", store.Token);
 
                         Stopwatch stopwatch = new Stopwatch();
                         stopwatch.Start();
