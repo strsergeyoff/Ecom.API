@@ -1,6 +1,7 @@
 ﻿using Ecom.API.Models;
 using Microsoft.EntityFrameworkCore;
 using MySql.Data.MySqlClient;
+using MySqlX.XDevAPI.Common;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Data;
@@ -131,91 +132,63 @@ namespace Ecom.API.Services
         public async Task LoadIncomes()
         {
             int incomesCount = 0;
-            int _stores = 0;
+            int storesCount = 0;
             int error = 0;
-            var stores = _context.rise_projects.ToList();
+
+            var stores = _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList();
 
 
-            var messageIncomes = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка поставок", parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
-
-            MessageIncomes.Add(messageIncomes.MessageId, new List<string>());
+            var messageIncomes = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка поставок",
+                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
+
             foreach (var store in stores)
             {
-                if (string.IsNullOrWhiteSpace(store?.Token) || store?.Token?.Length < 155 || store.Deleted.Value == true) continue;
 
                 try
                 {
-                    _stores++;
+                    storesCount++;
                     Stopwatch stopwatch = new Stopwatch();
                     stopwatch.Start();
 
                     DateTime? lastOrder = _context?.Incomes?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate);
                     var incomes = await FetchIncomesFromApi(store, lastOrder);
 
+                    incomesCount += incomes.Count;
+
                     if (incomes.Count > 0)
-                    {
-                        incomesCount += incomes.Count;
-                        using (var connection = new MySqlConnection(ConnectionMySQL))
-                        {
-                            connection.Open();
-
-                            var bulk = new BulkOperation<Income>(connection)
-                            {
-                                DestinationTableName = "Incomes"
-                            };
-
-                            await bulk.BulkInsertAsync(incomes);
-                            connection.Close();
-                        }
-                    }
+                        await BulkInsertEntitiesAsync(incomes, "Incomes");
 
                     stopwatch.Stop();
 
                     TimeSpan elapsed = stopwatch.Elapsed;
-                    int hours = elapsed.Hours;
-                    int minutes = elapsed.Minutes;
-                    int seconds = elapsed.Seconds;
 
-                    MessageIncomes[messageIncomes.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageIncomes, MessageIncomes, @$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{incomes.Count} шт.`
-⏱️ Время загрузки поставок `{hours} ч {minutes} м. {seconds} с.`");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}", MessageIncomes.Where(kv => kv.Key == messageIncomes.MessageId).SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageIncomes, _text);
+⏱️ Время загрузки поставок `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
                 }
                 catch (Exception ex)
                 {
                     error++;
 
-                    MessageIncomes[messageIncomes.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-```{ex}```");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageIncomes.Where(kv => kv.Key == messageIncomes.MessageId)
-                        .SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageIncomes, _text);
+                    await InsertAndEditMessage(messageIncomes, MessageIncomes, @$"🏦 Магазин `{store.Title}`
+```{ex.Message.ToString()}```");
                 }
             }
 
             _stopwatch.Stop();
 
             TimeSpan _elapsed = _stopwatch.Elapsed;
-            int _hours = _elapsed.Hours;
-            int _minutes = _elapsed.Minutes;
-            int _seconds = _elapsed.Seconds;
 
-            MessageIncomes[messageIncomes.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
+            await InsertAndEditMessage(messageIncomes, MessageIncomes, $@"✅ Успешно: `{storesCount - error} из {storesCount}`
 🆕 Загружено строк `{incomesCount} шт.`
-⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
-
-            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}", MessageIncomes.Where(kv => kv.Key == messageIncomes.MessageId).SelectMany(kv => kv.Value));
-
-            await EditMessage(messageIncomes, text);
+⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
             MessageIncomes.Clear();
         }
@@ -228,57 +201,53 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task<List<Income>> FetchIncomesFromApi(rise_project store, DateTime? lastIncome)
         {
-            string dateFrom = lastIncome is null ? $"?dateFrom={DateFrom}" : "?dateFrom=" + lastIncome.Value.ToString("yyyy-MM-ddTHH:mm:ss");
-            List<Income> Incomes = new List<Income>();
+
+            var incomes = new List<Income>();
+            var httpClient = _httpClientFactory.CreateClient();
+
+            string dateFrom = lastIncome?.ToString("yyyy-MM-ddTHH:mm:ss") ?? DateFrom;
+            string apiUrlBase = "https://statistics-api.wildberries.ru/api/v1/supplier/incomes?dateFrom=";
 
             try
             {
-                do
+                string apiUrl = apiUrlBase + dateFrom;
+                var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                requestMessage.Headers.Add("contentType", "application/json");
+                requestMessage.Headers.Add("Authorization", store.Token);
+
+                HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
+
+                if (response.IsSuccessStatusCode)
                 {
+                    string responseContent = await response.Content.ReadAsStringAsync();
+                    var fetchedIcomes = JsonConvert.DeserializeObject<List<Income>>(responseContent);
 
-                    using (var httpClient = new HttpClient())
-                    {
+                    fetchedIcomes = fetchedIcomes?.Where(x => lastIncome == null || x.Date > lastIncome)?.ToList();
 
-                        var apiUrl = $"https://statistics-api.wildberries.ru/api/v1/supplier/incomes{dateFrom}";
+                    foreach (var income in fetchedIcomes)
+                        income.ProjectId = store.Id;
 
-                        var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                        requestMessage.Headers.Add("contentType", "application/json");
-                        requestMessage.Headers.Add("Authorization", store.Token);
+                    incomes.AddRange(fetchedIcomes);
+                }
 
-                        HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
-
-                        if (response.IsSuccessStatusCode)
-                        {
-                            string responseContent = await response.Content.ReadAsStringAsync();
-
-                            if (lastIncome is not null)
-                                Incomes.AddRange(JsonConvert.DeserializeObject<List<Income>>(responseContent)?.Where(x => x.Date > lastIncome)?.ToList());
-                            else
-                                Incomes.AddRange(JsonConvert.DeserializeObject<List<Income>>(responseContent)?.ToList());
-
-                            foreach (var income in Incomes)
-                                income.ProjectId = store.Id;
-                        }
-                    }
-                    var data = Incomes?.Max(x => x?.LastChangeDate.Value)?.Date;
-
-                    if (data is null) break;
-
-                    if (data != DateTime.Now.Date)
-                    {
-                        dateFrom = "?dateFrom=" + data?.ToString("yyyy-MM-ddTHH:mm:ss");
-                        await Task.Delay(TimeSpan.FromMinutes(1));
-                    }
-
-
-                } while (Incomes?.Max(x => x?.LastChangeDate.Value.Date) != DateTime.Now.Date);
             }
-            catch
+            catch (HttpRequestException ex)
             {
-                return Incomes;
+                // Обработка ошибок связанных с HTTP-запросом
+                return incomes;
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                // Обработка ошибок десериализации JSON
+                return incomes;
+            }
+            catch (Exception ex)
+            {
+                // Другие специфические исключения
+                return incomes;
             }
 
-            return Incomes;
+            return incomes;
         }
         #endregion
 
@@ -291,24 +260,25 @@ namespace Ecom.API.Services
         public async Task LoadStocks()
         {
             int stocksCount = 0;
-            int _stores = 0;
+            int storesCount = 0;
             int error = 0;
 
-            var stores = _context.rise_projects.ToList();
+            var stores = _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList();
 
             var messageStocks = await _telegramBot.SendTextMessageAsync("740755376",
                 "Загрузка склада",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
-            MessageStocks.Add(messageStocks.MessageId, new List<string>());
-
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
+
             foreach (var store in stores)
             {
-
-                if (string.IsNullOrWhiteSpace(store?.Token) || store?.Token?.Length < 155 || store.Deleted.Value == true) continue;
-                _stores++;
+                storesCount++;
 
                 try
                 {
@@ -318,52 +288,25 @@ namespace Ecom.API.Services
                     List<Stock> Stocks = _context?.Stocks?.Where(x => x.ProjectId == store.Id).ToList();
                     List<Stock> stocks = await FetchStocksFromApi(store);
 
+                    stocksCount += stocks.Count;
+
                     if (stocks.Count > 0)
-                    {
-                        stocksCount += stocks.Count;
-
-                        using (var connection = new MySqlConnection(ConnectionMySQL))
-                        {
-                            connection.Open();
-
-                            var bulk = new BulkOperation<Stock>(connection)
-                            {
-                                DestinationTableName = "Stocks"
-                            };
-
-                            await bulk.BulkDeleteAsync(Stocks);
-                            await bulk.BulkInsertAsync(stocks);
-                            connection.Close();
-                        }
-                    }
+                        await BulkInsertEntitiesAsync(stocks, "Stocks", Stocks);
 
                     stopwatch.Stop();
                     TimeSpan elapsed = stopwatch.Elapsed;
-                    int hours = elapsed.Hours;
-                    int minutes = elapsed.Minutes;
-                    int seconds = elapsed.Seconds;
 
-                    MessageStocks[messageStocks.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageStocks, MessageStocks, @$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{stocks.Count} шт.`
-⏱️ Время загрузки склада `{hours} ч {minutes} м. {seconds} с.`");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}", MessageStocks.Where(kv => kv.Key == messageStocks.MessageId).SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageStocks, _text);
+⏱️ Время загрузки склада `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
                 }
 
                 catch (Exception ex)
                 {
                     error++;
 
-                    MessageStocks[messageStocks.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-```{ex}```");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageSales.Where(kv => kv.Key == messageStocks.MessageId)
-                        .SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageStocks, _text);
+                    await InsertAndEditMessage(messageStocks, MessageStocks, @$"🏦 Магазин `{store.Title}`
+```{ex.Message.ToString()}```");
                 }
 
 
@@ -372,17 +315,10 @@ namespace Ecom.API.Services
             _stopwatch.Stop();
 
             TimeSpan _elapsed = _stopwatch.Elapsed;
-            int _hours = _elapsed.Hours;
-            int _minutes = _elapsed.Minutes;
-            int _seconds = _elapsed.Seconds;
-            MessageStocks[messageStocks.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
+
+            await InsertAndEditMessage(messageStocks, MessageStocks, $@"✅ Успешно: `{storesCount - error} из {storesCount}`
 🆕 Загружено строк `{stocksCount} шт.`
-⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
-
-            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}", MessageStocks.Where(kv => kv.Key == messageStocks.MessageId).SelectMany(kv => kv.Value));
-
-            await EditMessage(messageStocks, text);
-
+⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
             MessageStocks.Clear();
         }
@@ -396,14 +332,15 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task<List<Stock>> FetchStocksFromApi(rise_project store)
         {
-            string dateFrom = $"?dateFrom={DateFrom}";
-            List<Stock> stocks = new List<Stock>();
 
-            using (var httpClient = new HttpClient())
+            var stocks = new List<Stock>();
+            var httpClient = _httpClientFactory.CreateClient();
+
+            string apiUrlBase = $"https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2019-06-20";
+
+            try
             {
-
-                var apiUrl = $"https://statistics-api.wildberries.ru/api/v1/supplier/stocks{dateFrom}";
-
+                string apiUrl = apiUrlBase;
                 var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
                 requestMessage.Headers.Add("contentType", "application/json");
                 requestMessage.Headers.Add("Authorization", store.Token);
@@ -413,14 +350,29 @@ namespace Ecom.API.Services
                 if (response.IsSuccessStatusCode)
                 {
                     string responseContent = await response.Content.ReadAsStringAsync();
+                    var fetchedStocks = JsonConvert.DeserializeObject<List<Stock>>(responseContent);
 
-                    stocks.AddRange(JsonConvert.DeserializeObject<List<Stock>>(responseContent)?.ToList());
-
-                    foreach (var stock in stocks)
+                    foreach (var stock in fetchedStocks)
                         stock.ProjectId = store.Id;
 
-                    return stocks;
+                    stocks.AddRange(fetchedStocks);
                 }
+
+            }
+            catch (HttpRequestException ex)
+            {
+                // Обработка ошибок связанных с HTTP-запросом
+                return stocks;
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                // Обработка ошибок десериализации JSON
+                return stocks;
+            }
+            catch (Exception ex)
+            {
+                // Другие специфические исключения
+                return stocks;
             }
 
             return stocks;
@@ -511,7 +463,7 @@ namespace Ecom.API.Services
         /// <returns></returns>
         private async Task InsertAndEditMessage(Message message, Dictionary<int, List<string>> keyValues, string newText)
         {
-            if(!keyValues.ContainsKey(message.MessageId))
+            if (!keyValues.ContainsKey(message.MessageId))
                 keyValues.Add(message.MessageId, new List<string>());
 
             keyValues[message.MessageId].Add(newText);
@@ -530,7 +482,7 @@ namespace Ecom.API.Services
         /// <param name="message">Телеграм сообщение</param>
         /// <param name="newText">Новое сообщение</param>
         /// <returns></returns>
-       public async Task EditMessage(Message message, string newText)
+        public async Task EditMessage(Message message, string newText)
         {
 
             await _telegramBot.EditMessageTextAsync(
@@ -548,7 +500,7 @@ namespace Ecom.API.Services
         /// <param name="entities">Список сущностей</param>
         /// <param name="tableName">Таблица для сохранения в базе данных</param>
         /// <returns></returns>
-        private async Task BulkInsertEntitiesAsync<T>(List<T> entities, string tableName) where T : class
+        private async Task BulkInsertEntitiesAsync<T>(List<T> entities, string tableName, List<T> entitiesOld = null) where T : class
         {
             using (var connection = new MySqlConnection(ConnectionMySQL))
             {
@@ -558,6 +510,9 @@ namespace Ecom.API.Services
                 {
                     DestinationTableName = tableName
                 };
+
+                if(entitiesOld is not null)
+                    await bulk.BulkDeleteAsync(entitiesOld);
 
                 await bulk.BulkInsertAsync(entities);
                 await connection.CloseAsync();
@@ -643,7 +598,7 @@ namespace Ecom.API.Services
                     // Другие специфические исключения
                     break;
                 }
-                
+
             }
 
             return orders;
@@ -689,7 +644,7 @@ namespace Ecom.API.Services
                     var reportDetails = await FetchReportDetailsFromApi(store, lastDate);
 
                     if (reportDetails.Count > 0)
-                            await BulkInsertEntitiesAsync(reportDetails, "ReportDetails");
+                        await BulkInsertEntitiesAsync(reportDetails, "ReportDetails");
 
                     stopwatch.Stop();
 
@@ -699,7 +654,7 @@ namespace Ecom.API.Services
 🆕 Загружено строк `{reportDetails.Count} шт.`
 ⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
 
-                    //await DataAnalysisForCardsFeedsAsync(store, messageReportDetails);
+                    await DataAnalysisForCardsFeedsAsync(store, messageReportDetails);
                 }
                 catch (Exception ex)
                 {
@@ -831,20 +786,21 @@ namespace Ecom.API.Services
             int _stores = 0;
             int error = 0;
 
-            var stores = _context.rise_projects.ToList();
+            var stores = _context.rise_projects
+               .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+               && x.Token.Length > 155
+               && x.Deleted.Value == false)
+               .ToList();
 
             var messageSales = await _telegramBot.SendTextMessageAsync("740755376",
                 "Загрузка продаж",
                 parseMode: ParseMode.Markdown);
-
-            MessageSales.Add(messageSales.MessageId, new List<string>());
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
 
             foreach (var store in stores)
             {
-                if (string.IsNullOrWhiteSpace(store?.Token) || store?.Token?.Length < 155 || store.Deleted.Value == true) continue;
                 try
                 {
                     _stores++;
@@ -853,55 +809,25 @@ namespace Ecom.API.Services
                     DateTime? lastSale = _context?.Sales?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate);
 
                     var sales = await FetchSalesFromApi(store, lastSale);
+                    salesCount += sales.Count;
 
                     if (sales.Count > 0)
-                    {
-                        salesCount += sales.Count;
-
-                        using (var connection = new MySqlConnection(ConnectionMySQL))
-                        {
-                            connection.Open();
-
-                            var bulk = new BulkOperation<Sale>(connection)
-                            {
-                                DestinationTableName = "Sales"
-                            };
-
-                            await bulk.BulkInsertAsync(sales);
-                            connection.Close();
-                        }
-
-                    }
+                        await BulkInsertEntitiesAsync(sales,"Sales");
 
                     stopwatch.Stop();
                     TimeSpan elapsed = stopwatch.Elapsed;
-                    int hours = elapsed.Hours;
-                    int minutes = elapsed.Minutes;
-                    int seconds = elapsed.Seconds;
 
-                    MessageSales[messageSales.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageSales, MessageSales, @$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{sales.Count} шт.`
-⏱️ Время загрузки продаж `{hours} ч {minutes} м. {seconds} с.`");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageSales.Where(kv => kv.Key == messageSales.MessageId)
-                        .SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageSales, _text);
+⏱️ Время загрузки продаж `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
                 }
 
                 catch (Exception ex)
                 {
                     error++;
 
-                    MessageSales[messageSales.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageSales, MessageSales, @$"🏦 Магазин `{store.Title}`
 ```{ex}```");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageSales.Where(kv => kv.Key == messageSales.MessageId)
-                        .SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageSales, _text);
                 }
 
             }
@@ -909,18 +835,10 @@ namespace Ecom.API.Services
             _stopwatch.Stop();
 
             TimeSpan _elapsed = _stopwatch.Elapsed;
-            int _hours = _elapsed.Hours;
-            int _minutes = _elapsed.Minutes;
-            int _seconds = _elapsed.Seconds;
-            MessageSales[messageSales.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
+
+            await InsertAndEditMessage(messageSales, MessageSales, $@"✅ Успешно: `{_stores - error} из {_stores}`
 🆕 Загружено строк `{salesCount} шт.`
-⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
-
-            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                MessageSales.Where(kv => kv.Key == messageSales.MessageId)
-                .SelectMany(kv => kv.Value));
-
-            await EditMessage(messageSales, text);
+⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
             MessageSales.Clear();
         }
@@ -1307,8 +1225,6 @@ namespace Ecom.API.Services
             var messageCompetitors = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка конкурентов",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
-            MessageCompetitors.Add(messageCompetitors.MessageId, new List<string>());
-
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
@@ -1333,27 +1249,15 @@ namespace Ecom.API.Services
                     int minutes = elapsed.Minutes;
                     int seconds = elapsed.Seconds;
 
-                    MessageCompetitors[messageCompetitors.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageCompetitors, MessageCompetitors, @$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{result} шт.`
 ⏱️ Время загрузки конкурентов `{hours} ч {minutes} м. {seconds} с.`");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageCompetitors.Where(kv => kv.Key == messageCompetitors.MessageId).SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageCompetitors, _text);
                 }
                 catch (Exception ex)
                 {
                     error++;
-
-                    MessageCompetitors[messageCompetitors.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageCompetitors, MessageCompetitors, @$"🏦 Магазин `{store.Title}`
 ```{ex}```");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageCompetitors.Where(kv => kv.Key == messageCompetitors.MessageId)
-                        .SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageCompetitors, _text);
                 }
 
             }
@@ -1365,14 +1269,9 @@ namespace Ecom.API.Services
             int _minutes = _elapsed.Minutes;
             int _seconds = _elapsed.Seconds;
 
-            MessageCompetitors[messageCompetitors.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
+            await InsertAndEditMessage(messageCompetitors, MessageCompetitors, $@"✅ Успешно: `{_stores - error} из {_stores}`
 🆕 Загружено строк `{CompetitorsCount} шт.`
 ⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
-
-            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                MessageCompetitors.Where(kv => kv.Key == messageCompetitors.MessageId).SelectMany(kv => kv.Value));
-
-            await EditMessage(messageCompetitors, text);
 
             MessageCompetitors.Clear();
 
