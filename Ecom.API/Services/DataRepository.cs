@@ -1,7 +1,6 @@
 ﻿using Ecom.API.Models;
 using Microsoft.EntityFrameworkCore;
 using MySql.Data.MySqlClient;
-using MySqlX.XDevAPI.Common;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Data;
@@ -13,6 +12,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Z.BulkOperations;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Ecom.API.Services
 {
@@ -135,11 +135,17 @@ namespace Ecom.API.Services
             int storesCount = 0;
             int error = 0;
 
+            
             var stores = _context.rise_projects
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
                 && x.Token.Length > 155
                 && x.Deleted.Value == false)
                 .ToList();
+
+            Dictionary<int, DateTime?> storesLastDates = new Dictionary<int, DateTime?>();
+
+            foreach (var store in stores)
+                storesLastDates.Add(store.Id, _context?.Incomes?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate));
 
 
             var messageIncomes = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка поставок",
@@ -157,7 +163,10 @@ namespace Ecom.API.Services
                     Stopwatch stopwatch = new Stopwatch();
                     stopwatch.Start();
 
-                    DateTime? lastOrder = _context?.Incomes?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate);
+                    DateTime? lastOrder = await _context?.Incomes
+                       ?.Where(x => x.ProjectId == store.Id)
+                       ?.MaxAsync(x => x.LastChangeDate);
+
                     var incomes = await FetchIncomesFromApi(store, lastOrder);
 
                     incomesCount += incomes.Count;
@@ -205,7 +214,7 @@ namespace Ecom.API.Services
             var incomes = new List<Income>();
             var httpClient = _httpClientFactory.CreateClient();
 
-            string dateFrom = lastIncome?.ToString("yyyy-MM-ddTHH:mm:ss") ?? DateFrom;
+            string dateFrom = lastIncome?.ToString("yyyy-MM-dd") ?? "2023-09-01";
             string apiUrlBase = "https://statistics-api.wildberries.ru/api/v1/supplier/incomes?dateFrom=";
 
             try
@@ -624,7 +633,7 @@ namespace Ecom.API.Services
                 && x.Deleted.Value == false)
                 .ToList();
 
-            var messageReportDetails = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов и ленты товаров",
+            var messageReportDetails = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             Stopwatch _stopwatch = new Stopwatch();
@@ -654,7 +663,8 @@ namespace Ecom.API.Services
 🆕 Загружено строк `{reportDetails.Count} шт.`
 ⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
 
-                    await DataAnalysisForCardsFeedsAsync(store, messageReportDetails);
+                    FormattableString formattableText = $"CALL ClearAndRefillTable({store.Id});";
+                    await _context.Database.ExecuteSqlAsync(formattableText);
                 }
                 catch (Exception ex)
                 {
@@ -1616,454 +1626,6 @@ namespace Ecom.API.Services
             }
             return productWbs;
         }
-        #endregion
-
-        #region Лента товаров
-
-        /// <summary>
-        /// Анализ данных для ленты новостей
-        /// </summary>
-        /// <param name="store">Магазин</param>
-        /// <returns></returns>
-        private async Task<List<rise_feed>> DataAnalysisForCardsFeedsAsync(rise_project store, Message message)
-        {
-            Stopwatch stopwatch = new Stopwatch();
-            stopwatch.Start();
-
-            var reportDetails = _context?.ReportDetails?.Where(x => x.ProjectId == store.Id).ToList();
-
-            var cards = _context?.Cards
-                .Include(x => x.Photos)?
-                .Include(X => X.Sizes)?
-                .Where(x => x.ProjectId == store.Id)
-                .ToList();
-
-            var orders = _context?.rise_orders?.Where(x => x.ProjectId == store.Id).ToList();
-            var stocks = _context?.Stocks?.Where(x => x.ProjectId == store.Id).ToList();
-            var incomes = _context?.Incomes?.Where(x => x.ProjectId == store.Id).ToList();
-
-            List<rise_feed> cardFeeds = new List<rise_feed>();
-
-            //Список уникальных баркодов из отчета
-            List<rise_feed>? barcodes = reportDetails?.Where(x => !string.IsNullOrEmpty(x.Barcode))
-                .GroupBy(x => x.Barcode)
-                .Select(group => new rise_feed
-                {
-                    Barcode = group.FirstOrDefault().Barcode,
-                    Url = $"https://wb.ru/catalog/{group.FirstOrDefault().Nm_id}/detail.aspx",
-                    NmId = group.First().Nm_id,
-                })
-                .ToList();
-
-            //Список уникальных баркодов из склада
-            List<rise_feed>? barcodesStoks = stocks?.Where(x => !string.IsNullOrEmpty(x.Barcode))
-                .GroupBy(x => x.Barcode)
-                .Select(group => new rise_feed
-                {
-                    Barcode = group.FirstOrDefault().Barcode,
-                    Url = $"https://wb.ru/catalog/{group.FirstOrDefault().NmId}/detail.aspx",
-                    NmId = group.First().NmId,
-                })
-                .ToList();
-
-            //Список уникальных баркодов в заказах
-            List<rise_feed>? barcodesOrders = orders?.Where(x => !string.IsNullOrEmpty(x.Barcode))
-                .GroupBy(x => x.Barcode)
-                .Select(group => new rise_feed
-                {
-                    Barcode = group.FirstOrDefault().Barcode,
-                    Url = $"https://wb.ru/catalog/{group.FirstOrDefault().NmId}/detail.aspx",
-                    NmId = group.First().NmId,
-                })
-                .ToList();
-
-            //Объединение 3 коллекций с уникальными баркодами
-            barcodes.AddRange(barcodesStoks);
-            barcodes.AddRange(barcodesOrders);
-
-
-            //Получение уникальных баркодов товаров
-            List<rise_feed> UniqProducts = barcodes.Where(x => !string.IsNullOrEmpty(x.Barcode))
-                                       .GroupBy(x => x.Barcode)
-                                       .Select(x => x.First())
-                                       .Select(x => new rise_feed()
-                                       {
-                                           Barcode = x.Barcode,
-                                           NmId = x.NmId,
-                                           Url = x.Url,
-
-                                           Sa_name = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.VendorCode ??
-                                                     reportDetails?.FirstOrDefault(y => y.Barcode == x.Barcode)?.Sa_name ??
-                                                     stocks?.FirstOrDefault(y => y.NmId == x.NmId)?.SupplierArticle ??
-                                                     orders.FirstOrDefault(y => y.NmId == x.NmId)?.SupplierArticle,
-
-                                           Ts_name = reportDetails?.FirstOrDefault(y => y.Barcode == x.Barcode)?.Ts_name ??
-                                                     orders?.FirstOrDefault(y => y.Barcode == x.Barcode)?.TechSize ??
-                                                     stocks?.FirstOrDefault(y => y.NmId == x.NmId)?.TechSize,
-
-
-                                           Brand_name = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Brand ??
-                                                        reportDetails?.FirstOrDefault(y => y.Barcode == x.Barcode)?.Brand_name ??
-                                                        stocks?.FirstOrDefault(y => y.NmId == x.NmId)?.Brand ??
-                                                         orders.FirstOrDefault(y => y.NmId == x.NmId)?.Brand,
-
-                                           Subject = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.SubjectName ??
-                                                    reportDetails?.FirstOrDefault(y => y.Barcode == x.Barcode)?.Subject_name ??
-                                                    stocks?.FirstOrDefault(y => y.NmId == x.NmId)?.Subject ??
-                                                    orders.FirstOrDefault(y => y.NmId == x.NmId)?.Subject,
-
-                                           Category = orders?.FirstOrDefault(y => y.NmId == x.NmId)?.Category ??
-                                                      stocks?.FirstOrDefault(y => y.NmId == x.NmId)?.Category,
-
-                                           Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ??
-                                                   GetWbImageUrl(x.NmId.ToString()),
-
-                                           InStock = stocks?.FirstOrDefault(y => y.Barcode == x.Barcode)?.QuantityFull.Value ?? 0,
-
-                                           Tags = string.Empty,
-
-                                           Commision = reportDetails?.Where(y => y.Barcode == x.Barcode).Sum(x => x.Commission),
-                                           Logistics = reportDetails.Where(y => y.Barcode == x.Barcode).Sum(x => x.Logistics),
-
-                                           QuantityOfSupplies = incomes?.Where(y => y.Barcode == x.Barcode).Sum(x => x.Quantity),
-                                           DateTimeQuantityOfSupplies = incomes?.Where(y => y.Barcode == x.Barcode).Max(x => x.Date),
-
-                                           //Заказы
-                                           OrderedCount = orders?.Where(y => y.Barcode == x.Barcode).Count(),
-                                           OrderSummaPrice = orders?.Where(y => y.Barcode == x.Barcode).Sum(x => x.TotalPriceDiscount.Value),
-
-                                           //Отмены
-                                           CancelCount = orders?.Where(y => y.Barcode == x.Barcode && y.IsCancel).Count(),
-                                           CancelSummaPrice = orders?.Where(y => y.Barcode == x.Barcode && y.IsCancel).Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
-
-                                           //Отправлены
-                                           DispatchCount = _context?.rise_cardsdispatched?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
-                                           DispatchSummaPrice = _context?.rise_cardsdispatched?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
-
-                                           //Выкуплены
-                                           PurchasedCount = _context?.rise_cardspurchaed?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Count(),
-                                           PurchasedSummaPrice = _context?.rise_cardspurchaed?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
-
-                                           //Возвращены
-                                           ReturnCount = _context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
-                                           ReturnSummaPrice = _context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id)?.Where(x => x.TotalPriceDiscount.HasValue).Sum(x => x.TotalPriceDiscount.Value),
-
-                                           //Без статуса
-                                           WitchStatusCount = _context?.rise_cardsreturns?.Where(y => y.Barcode == x.Barcode && y.ProjectId == store.Id).Count(),
-
-                                           ProjectId = store.Id
-                                       }).ToList();
-
-            cardFeeds.AddRange(UniqProducts);
-
-            var _cardFeeds = _context?.rise_feeds?.Where(x => x.ProjectId == store.Id).ToList();
-
-            if (cardFeeds?.Count > 0)
-            {
-                using (var connection = new MySqlConnection(ConnectionMySQL))
-                {
-                    connection.Open();
-
-                    var bulk = new BulkOperation<rise_feed>(connection)
-                    {
-                        DestinationTableName = "rise_feeds"
-                    };
-
-                    await bulk.BulkDeleteAsync(_cardFeeds);
-                    await bulk.BulkInsertAsync(cardFeeds);
-                    connection.Close();
-                }
-            }
-
-            stopwatch.Stop();
-
-            TimeSpan elapsed = stopwatch.Elapsed;
-            int hours = elapsed.Hours;
-            int minutes = elapsed.Minutes;
-            int seconds = elapsed.Seconds;
-
-            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-🆕 Загружено строк `{UniqProducts.Count} шт.`
-⏱️ Время загрузки ленты `{hours} ч {minutes} м. {seconds} с.`");
-
-            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
-
-            await EditMessage(message, _text);
-
-            return cardFeeds;
-
-        }
-
-        //        /// <summary>
-        //        /// Купленные товары
-        //        /// </summary>
-        //        /// <param name="store">Магазин</param>
-        //        /// <returns></returns>
-        //        private async Task<List<rise_cardpurchased>> FetchCardsPurchasedAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
-        //        {
-        //            Stopwatch stopwatch = new Stopwatch();
-        //            stopwatch.Start();
-
-        //            var result = await Task.Run(async () =>
-        //            {
-        //                try
-        //                {
-
-        //                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "продажа" && x.ProjectId == store.Id).ToList();
-
-        //                    var cards = context?.Cards
-        //                        .Include(x => x.Photos)?
-        //                        .Include(X => X.Sizes)?
-        //                        .Where(x => x.ProjectId == store.Id).ToList();
-
-        //                    var orders = context?.rise_orders
-        //                        .Where(x => x.ProjectId == store.Id).ToList();
-
-        //                    var result = orders
-        //                     .Where(x => x.IsOrdered && !x.IsCancel)
-        //                     .Where(x => list.Any(y => y.Srid == x.Srid))
-        //                     .Select(x => new rise_cardpurchased
-        //                     {
-
-        //                         Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
-
-        //                         Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
-
-        //                         Sale_dt = list?.FirstOrDefault(y => y.Srid == x.Srid)?.Sale_dt,
-        //                         Order_dt = x.Date,
-
-        //                         Barcode = x.Barcode,
-        //                         NmId = x.NmId,
-        //                         Sa_name = x.SupplierArticle,
-
-        //                         Ts_name = x.TechSize,
-        //                         TotalPriceDiscount = x.TotalPriceDiscount,
-        //                         ProjectId = store.Id
-        //                     });
-
-        //                    return result.ToList();
-        //                }
-        //                catch (Exception ex)
-        //                {
-
-        //                    throw;
-        //                }
-
-        //            });
-
-        //            if (result.Count > 0)
-        //            {
-        //                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
-        //                {
-        //                    connection.Open();
-
-        //                    var bulk = new BulkOperation<rise_cardpurchased>(connection)
-        //                    {
-        //                        DestinationTableName = "rise_cardspurchaed"
-        //                    };
-
-        //                    await bulk.BulkInsertAsync(result);
-        //                    connection.Close();
-        //                }
-        //            }
-
-        //            stopwatch.Stop();
-
-        //            TimeSpan elapsed = stopwatch.Elapsed;
-        //            int hours = elapsed.Hours;
-        //            int minutes = elapsed.Minutes;
-        //            int seconds = elapsed.Seconds;
-
-        //            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-        //🆕 Загружено строк `{result.Count} шт.`
-        //⏱️ Время загрузки купленных товаров `{hours} ч {minutes} м. {seconds} с.`");
-
-        //            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-        //                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
-
-        //            await EditMessage(message, _text);
-
-        //            return result;
-        //        }
-
-        //        /// <summary>
-        //        /// Возвращенные товары
-        //        /// </summary>
-        //        /// <returns></returns>
-        //        private async Task<List<rise_cardreturn>> FetchCardsReturnsAsync(rise_project store, List<ReportDetail> reportDetails, Message message)
-        //        {
-        //            Stopwatch stopwatch = new Stopwatch();
-        //            stopwatch.Start();
-
-        //            var result = await Task.Run(async () =>
-        //            {
-        //                try
-        //                {
-
-
-        //                    var list = reportDetails?.Where(x => x.Doc_type_name != null && x.Doc_type_name.ToLower() == "возврат" && x.ProjectId == store.Id).ToList();
-
-        //                    var cards = context?.Cards
-        //                           .Include(x => x.Photos)?
-        //                           .Include(X => X.Sizes)?
-        //                           .Where(x => x.ProjectId == store.Id).ToList();
-
-        //                    var orders = context?.rise_orders
-        //                        .Where(x => x.ProjectId == store.Id).ToList();
-
-        //                    var _cardsReturns = orders
-        //                    ?.Where(x => x.IsOrdered && !x.IsCancel)
-        //                ?.Where(x => list.Any(y => y.Srid == x.Srid))
-        //                    ?.Select(x => new rise_cardreturn
-        //                    {
-        //                        Url = $"https://wb.ru/catalog/{x.NmId}/detail.aspx",
-
-        //                        Image = cards?.FirstOrDefault(y => y.NmID == x.NmId)?.Photos?.FirstOrDefault()?.Tm ?? GetWbImageUrl(x.NmId.ToString()),
-
-        //                        Order_dt = x.Date,
-
-        //                        Barcode = x.Barcode,
-        //                        NmId = x.NmId,
-        //                        Sa_name = x.SupplierArticle,
-
-        //                        Ts_name = x.TechSize,
-        //                        TotalPriceDiscount = x.TotalPriceDiscount,
-        //                        ProjectId = store.Id
-        //                    });
-
-        //                    return _cardsReturns.ToList();
-        //                }
-        //                catch (Exception ex)
-        //                {
-
-        //                    throw;
-        //                }
-
-        //            });
-
-        //            if (result.Count > 0)
-        //            {
-        //                using (var connection = new MySqlConnection("Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F"))
-        //                {
-        //                    connection.Open();
-
-        //                    var bulk = new BulkOperation<rise_cardreturn>(connection)
-        //                    {
-        //                        DestinationTableName = "rise_cardsreturns"
-        //                    };
-
-        //                    await bulk.BulkInsertAsync(result);
-        //                    connection.Close();
-        //                }
-        //            }
-
-        //            stopwatch.Stop();
-
-        //            TimeSpan elapsed = stopwatch.Elapsed;
-        //            int hours = elapsed.Hours;
-        //            int minutes = elapsed.Minutes;
-        //            int seconds = elapsed.Seconds;
-
-
-        //            MessageReportDetails[message.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-        //🆕 Загружено строк `{result.Count} шт.`
-        //⏱️ Время загрузки возвращенных товаров `{hours} ч {minutes} м. {seconds} с.`");
-
-        //            string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-        //                MessageReportDetails.Where(kv => kv.Key == message.MessageId).SelectMany(kv => kv.Value));
-
-        //            await EditMessage(message, _text);
-
-        //            return result;
-        //        }
-
-        //        /// <summary>
-        //        /// Без статуса товары
-        //        /// </summary>
-        //        /// <returns></returns>
-        //        private async Task<List<rise_cardnullstatus>> FilterCardsNullStatusAsync(List<rise_carddispatched> cardsDispatched, rise_project store)
-        //        {
-        //            Stopwatch stopwatch = new Stopwatch();
-        //            stopwatch.Start();
-
-        //            var result = await Task.Run(async () =>
-        //            {
-        //                try
-        //                {
-
-        //                    List<rise_cardnullstatus> nullStatusOrders = new List<rise_cardnullstatus>();
-
-        //                    foreach (var cd in cardsDispatched)
-        //                    {
-        //                        var dateFrom = cd.Order_dt.Value;
-        //                        var dateTo = cd.Order_dt.Value.AddMonths(1);
-
-        //                        var card = await context?.ReportDetails?.FirstOrDefaultAsync(x =>
-        //                        x.Order_dt >= dateFrom &&
-        //                        x.Order_dt <= dateTo &&
-        //                        x.ProjectId == store.Id &&
-        //                        x.Srid == cd.Srid);
-
-        //                        if (card is null) continue;
-
-        //                        nullStatusOrders.Add(new rise_cardnullstatus()
-        //                        {
-        //                            Srid = cd.Srid,
-        //                            Url = cd.Url,
-
-        //                            Image = cd.Image,
-
-        //                            Order_dt = cd.Order_dt,
-
-        //                            Barcode = cd.Barcode,
-        //                            NmId = cd.NmId,
-        //                            Sa_name = cd.Sa_name,
-
-        //                            Ts_name = cd.Ts_name,
-        //                            TotalPriceDiscount = cd.TotalPriceDiscount,
-        //                            ProjectId = cd.ProjectId
-
-        //                        });
-        //                    }
-
-        //                    return nullStatusOrders;
-        //                }
-        //                catch (Exception ex)
-        //                {
-
-        //                    throw;
-        //                }
-
-        //            });
-
-        //            var cardsNullStatus = context?.rise_cardsnullstatus?.Where(x => x.ProjectId == store.Id).ToList();
-        //            context?.rise_cardsnullstatus?.RemoveRange(cardsNullStatus);
-        //            await context?.SaveChangesAsync();
-
-        //            context?.rise_cardsnullstatus?.AddRangeAsync(result);
-        //            await context?.SaveChangesAsync();
-
-        //            stopwatch.Stop();
-
-        //            TimeSpan elapsed = stopwatch.Elapsed;
-        //            int hours = elapsed.Hours;
-        //            int minutes = elapsed.Minutes;
-        //            int seconds = elapsed.Seconds;
-
-        //            string message = @$"🏦 Магазин `{store.Title}`
-        //🆕 Загружено строк `{result.Count - cardsNullStatus.Count} шт.`
-        //⏱️ Время загрузки без статуса товаров `{hours} ч {minutes} м. {seconds} с.`
-
-        //#{store.Title.Replace(" ", "") + DateTime.Now.Date.ToString("ddMMyyy")} #БезСтатусаТовары";
-
-        //            await telegramBot.SendTextMessageAsync("740755376", message, parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
-
-
-        //            return result;
-        //        }
-
-
         #endregion
 
         #region Рекламные кампании
