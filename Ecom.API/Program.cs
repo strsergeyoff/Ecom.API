@@ -84,21 +84,21 @@ builder.Services.AddQuartz(q =>
     );
     #endregion
 
-    #region Продажи
+    //#region Продажи
 
-    var jobKeyLoadSales = new JobKey("LoadSales");
-    q.AddJob<LoadSales>(opts => opts.WithIdentity(jobKeyLoadSales));
+    //var jobKeyLoadSales = new JobKey("LoadSales");
+    //q.AddJob<LoadSales>(opts => opts.WithIdentity(jobKeyLoadSales));
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadSales)
-    .WithIdentity($"{jobKeyLoadSales}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(30)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadSales)
+    //.WithIdentity($"{jobKeyLoadSales}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(30)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
     #region Заказы
 

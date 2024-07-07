@@ -663,8 +663,10 @@ namespace Ecom.API.Services
 🆕 Загружено строк `{reportDetails.Count} шт.`
 ⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
 
-                    FormattableString formattableText = $"CALL ClearAndRefillTable({store.Id});";
+                    FormattableString formattableText = $"CALL RefreshFeeds({store.Id});";
+                    FormattableString formattableText2 = $"CALL UpdateFeeds({store.Id});";
                     await _context.Database.ExecuteSqlAsync(formattableText);
+                    await _context.Database.ExecuteSqlAsync(formattableText2);
                 }
                 catch (Exception ex)
                 {
