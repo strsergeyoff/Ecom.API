@@ -84,21 +84,21 @@ builder.Services.AddQuartz(q =>
     );
     #endregion
 
-    //#region Заказы
+    #region Заказы/
 
-    //var jobKeyLoadOrders = new JobKey("LoadOrders");
-    //q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));
+    var jobKeyLoadOrders = new JobKey("LoadOrders");
+    q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));
 
-    //q.AddTrigger(opts => opts
-    //.ForJob(jobKeyLoadOrders)
-    //.WithIdentity($"{jobKeyLoadOrders}-trigger")
-    //.StartNow()
-    //.WithSimpleSchedule(x => x
-    //.WithIntervalInMinutes(30)
-    //.RepeatForever()
-    //.Build())
-    //);
-    //#endregion
+    q.AddTrigger(opts => opts
+    .ForJob(jobKeyLoadOrders)
+    .WithIdentity($"{jobKeyLoadOrders}-trigger")
+    .StartNow()
+    .WithSimpleSchedule(x => x
+    .WithIntervalInMinutes(30)
+    .RepeatForever()
+    .Build())
+    );
+    #endregion
 
     //#region Юнит
 
