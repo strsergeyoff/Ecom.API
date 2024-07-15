@@ -133,9 +133,6 @@ namespace Ecom.API.Services
             int storesCount = 0;
             int errors = 0;
 
-            var tasks = new List<Task>();
-            var semaphoreSlim = new SemaphoreSlim(10, 10);
-
             var stores = id is null ? _context.rise_projects
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
                 && x.Token.Length > 155
@@ -161,10 +158,15 @@ namespace Ecom.API.Services
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
 
+            var tasks = new List<Task>();
+            var semaphoreSlim = new SemaphoreSlim(10, 10);
+
             foreach (var store in stores)
             {
                 tasks.Add(Task.Run(async () =>
                 {
+                    await semaphoreSlim.WaitAsync();
+
                     try
                     {
                         Stopwatch stopwatch = new Stopwatch();
