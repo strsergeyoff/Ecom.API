@@ -68,21 +68,21 @@ builder.Services.AddQuartz(q =>
     );
     #endregion
 
-    //#region Склад
+    #region Склад
 
-    //var jobKeyLoadStocks = new JobKey("LoadStocks");
-    //q.AddJob<LoadStocks>(opts => opts.WithIdentity(jobKeyLoadStocks));
+    var jobKeyLoadStocks = new JobKey("LoadStocks");
+    q.AddJob<LoadStocks>(opts => opts.WithIdentity(jobKeyLoadStocks));
 
-    //q.AddTrigger(opts => opts
-    //.ForJob(jobKeyLoadStocks)
-    //.WithIdentity($"{jobKeyLoadStocks}-trigger")
-    //.StartNow()
-    //.WithSimpleSchedule(x => x
-    //.WithIntervalInMinutes(60)
-    //.RepeatForever()
-    //.Build())
-    //);
-    //#endregion
+    q.AddTrigger(opts => opts
+    .ForJob(jobKeyLoadStocks)
+    .WithIdentity($"{jobKeyLoadStocks}-trigger")
+    .StartNow()
+    .WithSimpleSchedule(x => x
+    .WithIntervalInMinutes(60)
+    .RepeatForever()
+    .Build())
+    );
+    #endregion
 
     //#region Заказы
 

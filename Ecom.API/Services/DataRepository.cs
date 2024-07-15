@@ -175,7 +175,11 @@ namespace Ecom.API.Services
                         var incomes = await FetchIncomesFromApi(store, storesLastDates[store.Id]);
 
                         if (incomes.Count > 0)
-                            incomesCount += await BulkLoader("Incomes", incomes);
+                        {
+                            incomesCount += incomes.Count;
+                            await BulkLoader("Incomes", incomes);
+                        }
+                            
 
                         storesCount++;
 
@@ -280,7 +284,7 @@ namespace Ecom.API.Services
         {
             int stocksCount = 0;
             int storesCount = 0;
-            int error = 0;
+            int errors = 0;
 
             var stores = id is null ? _context.rise_projects
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
@@ -297,50 +301,68 @@ namespace Ecom.API.Services
                 "Загрузка склада",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
+            MessageStocks.Add(messageStocks.MessageId, new List<string>());
+
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
 
+            var tasks = new List<Task>();
+            var semaphoreSlim = new SemaphoreSlim(10, 10);
+
             foreach (var store in stores)
             {
-                storesCount++;
+                List<Stock> Stocks = _context?.Stocks?.Where(x => x.ProjectId == store.Id).ToList();
+                _context.Stocks.RemoveRange(Stocks);
+               await _context.SaveChangesAsync();
+            }
 
-                try
+            foreach (var store in stores)
+            {
+                tasks.Add(Task.Run(async () =>
                 {
-                    Stopwatch stopwatch = new Stopwatch();
-                    stopwatch.Start();
+                    await semaphoreSlim.WaitAsync();
 
-                    List<Stock> Stocks = _context?.Stocks?.Where(x => x.ProjectId == store.Id).ToList();
-                    List<Stock> stocks = await FetchStocksFromApi(store);
+                    try
+                    {
+                        Stopwatch stopwatch = new Stopwatch();
+                        stopwatch.Start();
 
-                    stocksCount += stocks.Count;
+                        List<Stock> stocks = await FetchStocksFromApi(store);
 
-                    if (stocks.Count > 0)
-                        await BulkLoader("Stocks", stocks);
+                        stocksCount += stocks.Count;
 
-                    stopwatch.Stop();
-                    TimeSpan elapsed = stopwatch.Elapsed;
+                        if (stocks.Count > 0)
+                            await BulkLoader("Stocks", stocks);
 
-                    await InsertAndEditMessage(messageStocks, MessageStocks, @$"🏦 Магазин `{store.Title}`
+                        stopwatch.Stop();
+                        TimeSpan elapsed = stopwatch.Elapsed;
+
+                        storesCount++;
+
+                        MessageStocks[messageStocks.MessageId].Add(@$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{stocks.Count} шт.`
 ⏱️ Время загрузки склада `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-                }
-
-                catch (Exception ex)
-                {
-                    error++;
-
-                    await InsertAndEditMessage(messageStocks, MessageStocks, @$"🏦 Магазин `{store.Title}`
-```{ex.Message.ToString()}```");
-                }
-
-
+                    }
+                    catch (Exception ex)
+                    {
+                        errors++;
+                        MessageStocks[messageStocks.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+`{ex.Message.ToString()}`");
+                    }
+                    finally
+                    {
+                        semaphoreSlim.Release();
+                    }
+                }));
             }
+
+            await Task.WhenAll(tasks);
 
             _stopwatch.Stop();
 
             TimeSpan _elapsed = _stopwatch.Elapsed;
 
-            await InsertAndEditMessage(messageStocks, MessageStocks, $@"✅ Успешно: `{storesCount - error} из {storesCount}`
+            await InsertAndEditMessage(messageStocks, MessageStocks, $@"✅ Успешно: `{storesCount - errors} из {storesCount}`
 🆕 Загружено строк `{stocksCount} шт.`
 ⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
