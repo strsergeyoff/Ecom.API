@@ -174,10 +174,6 @@ builder.Services.AddQuartz(q =>
 
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 builder.Services.AddScoped<IDataRepository, DataRepository>();
-builder.Services.AddHttpsRedirection(options =>
-{
-    options.HttpsPort = 443; // ”кажите порт HTTPS вашего приложени€ здесь
-});
 
 
 var app = builder.Build();
