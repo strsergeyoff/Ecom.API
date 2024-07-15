@@ -14,9 +14,10 @@ namespace Ecom.API.Controllers
         /// <param name="id"></param>
         /// <returns></returns>
         [HttpPost("/project")]
-        public async Task<IActionResult> AddStoreAsync([FromBody] int id)
+        public async Task<IActionResult> AddStoreAsync([FromQuery] int id)
         {
-            await dataRepository.LoadStore(id);
+                await dataRepository.LoadStore(id);
+           
 
             return Ok();
         }

@@ -52,21 +52,21 @@ builder.Services.AddQuartz(q =>
 {
     q.UseMicrosoftDependencyInjectionJobFactory();
 
-    //#region Поставки
+    #region Поставки
 
-    //var jobKeyLoadIncomes = new JobKey("LoadIncomes");
-    //q.AddJob<LoadIncomes>(opts => opts.WithIdentity(jobKeyLoadIncomes));
+    var jobKeyLoadIncomes = new JobKey("LoadIncomes");
+    q.AddJob<LoadIncomes>(opts => opts.WithIdentity(jobKeyLoadIncomes));
 
-    //q.AddTrigger(opts => opts
-    //.ForJob(jobKeyLoadIncomes)
-    //.WithIdentity($"{jobKeyLoadIncomes}-trigger")
-    //.StartNow()
-    //.WithSimpleSchedule(x => x
-    //.WithIntervalInMinutes(30)
-    //.RepeatForever()
-    //.Build())
-    //);
-    //#endregion
+    q.AddTrigger(opts => opts
+    .ForJob(jobKeyLoadIncomes)
+    .WithIdentity($"{jobKeyLoadIncomes}-trigger")
+    .StartNow()
+    .WithSimpleSchedule(x => x
+    .WithIntervalInMinutes(30)
+    .RepeatForever()
+    .Build())
+    );
+    #endregion
 
     //#region Склад
 
@@ -150,24 +150,24 @@ builder.Services.AddQuartz(q =>
     //   );
     //  #endregion
 
-    #region Конкуренты
+    //  #region Конкуренты
 
-    var jobKeyLoadCompetitors = new JobKey("LoadCompetitors");
-    q.AddJob<LoadCompetitors>(opts => opts.WithIdentity(jobKeyLoadCompetitors));
+    //  var jobKeyLoadCompetitors = new JobKey("LoadCompetitors");
+    //  q.AddJob<LoadCompetitors>(opts => opts.WithIdentity(jobKeyLoadCompetitors));
 
-    q.AddTrigger(opts => opts
-  .ForJob(jobKeyLoadCompetitors)
-  .WithIdentity($"{jobKeyLoadCompetitors}-trigger-now")
-  .StartNow()
-  .WithSimpleSchedule(x => x.Build())
-  );
+    //  q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadCompetitors)
+    //.WithIdentity($"{jobKeyLoadCompetitors}-trigger-now")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x.Build())
+    //);
 
-    q.AddTrigger(opts => opts
-        .ForJob(jobKeyLoadCompetitors)
-        .WithIdentity($"{jobKeyLoadCompetitors}-trigger")
-        .WithCronSchedule("0 1 0 * * ?")
-        );
-    #endregion
+    //  q.AddTrigger(opts => opts
+    //      .ForJob(jobKeyLoadCompetitors)
+    //      .WithIdentity($"{jobKeyLoadCompetitors}-trigger")
+    //      .WithCronSchedule("0 1 0 * * ?")
+    //      );
+    //  #endregion
 
 });
 
