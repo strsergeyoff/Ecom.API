@@ -7,8 +7,6 @@ using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.UseUrls("https://localhost:443");
-
 // Add services to the container.
 
 builder.Services.AddControllers();
@@ -176,6 +174,11 @@ builder.Services.AddQuartz(q =>
 
 builder.Services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
 builder.Services.AddScoped<IDataRepository, DataRepository>();
+builder.Services.AddHttpsRedirection(options =>
+{
+    options.HttpsPort = 443; // ”кажите порт HTTPS вашего приложени€ здесь
+});
+
 
 var app = builder.Build();
 
