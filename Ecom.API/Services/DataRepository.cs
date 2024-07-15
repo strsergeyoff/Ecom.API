@@ -475,19 +475,32 @@ namespace Ecom.API.Services
 
                 tasks.Add(Task.Run(async () =>
                 {
+                    await semaphoreSlim.WaitAsync();
+
                     try
                     {
+                        Stopwatch stopwatch = new Stopwatch();
+                        stopwatch.Start();
 
                         var orders = await FetchOrdersFromApi(store, directory[store.Id]);
 
-                        if (orders.Count > 0)
-                            newRowCount += await BulkLoader("rise_orders", orders);
+                        newRowCount += orders.Count;
 
-                        foreachStoresCount++;
+                        if (orders.Count > 0)
+                            await BulkLoader("rise_orders", orders);
+
+                        stopwatch.Stop();
+                        TimeSpan elapsed = stopwatch.Elapsed;
+
+                        MessageOrders[messageOrders.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+🆕 Загружено строк `{orders.Count} шт.`
+⏱️ Время загрузки склада `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
                     }
                     catch (Exception ex)
                     {
                         errors++;
+                        MessageOrders[messageOrders.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+`{ex.Message.ToString()}`");
                     }
                     finally
                     {
@@ -508,7 +521,10 @@ namespace Ecom.API.Services
 
             MessageOrders.Clear();
 
-            await LoadReportDetails(id);
+            //if(id is not null)
+            //await LoadReportDetails(id);
+            //else
+            //    await LoadReportDetails();
         }
 
         /// <summary>
