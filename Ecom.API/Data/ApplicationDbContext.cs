@@ -26,8 +26,4 @@ public class ApplicationDbContext : DbContext
     public DbSet<rise_competitorphoto> rise_competitorsphotos { get; set; }
     public DbSet<rise_competitorstatistic> rise_competitorsstatistics { get; set; }
     public DbSet<rise_feed> rise_feeds { get; set; }
-    public DbSet<rise_carddispatched> rise_cardsdispatched { get; set; }
-    public DbSet<rise_cardpurchased> rise_cardspurchaed { get; set; }
-    public DbSet<rise_cardreturn> rise_cardsreturns { get; set; }
-    public DbSet<rise_cardnullstatus> rise_cardsnullstatus { get; set; }
 }

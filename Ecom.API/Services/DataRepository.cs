@@ -6,13 +6,13 @@ using Newtonsoft.Json.Linq;
 using System.Data;
 using System.Diagnostics;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Z.BulkOperations;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace Ecom.API.Services
 {
@@ -20,8 +20,7 @@ namespace Ecom.API.Services
     {
         #region Поля и свойства
 
-        private readonly string ConnectionMySQL = "Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F;Charset=utf8";
-        private readonly string DateFrom = "2024-01-29";
+        private readonly string ConnectionMySQL = "Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F;AllowLoadLocalInfile=true;Charset=utf8";
 
         private const string WbSmallImageUrlTemplate = "https://basket-#id#.wb.ru/vol#count4#/part#count6#/#article#/images/tm/#number#.jpg";
 
@@ -52,7 +51,6 @@ namespace Ecom.API.Services
             _telegramBot.StartReceiving(HandleUpdateAsync, HandleErrorAsync);
         }
         #endregion
-
 
         #region Другое
         public async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
@@ -129,14 +127,19 @@ namespace Ecom.API.Services
         /// Загрузка поставок
         /// </summary>
         /// <returns></returns>
-        public async Task LoadIncomes()
+        public async Task LoadIncomes(int? id = null)
         {
             int incomesCount = 0;
             int storesCount = 0;
             int error = 0;
 
-            
-            var stores = _context.rise_projects
+
+            var stores = id is null ? _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList() :
+                _context.rise_projects.Where(x => x.Id == id)
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
                 && x.Token.Length > 155
                 && x.Deleted.Value == false)
@@ -172,7 +175,7 @@ namespace Ecom.API.Services
                     incomesCount += incomes.Count;
 
                     if (incomes.Count > 0)
-                        await BulkInsertEntitiesAsync(incomes, "Incomes");
+                        await BulkLoader("Incomes", incomes);
 
                     stopwatch.Stop();
 
@@ -214,7 +217,7 @@ namespace Ecom.API.Services
             var incomes = new List<Income>();
             var httpClient = _httpClientFactory.CreateClient();
 
-            string dateFrom = lastIncome?.ToString("yyyy-MM-dd") ?? "2023-09-01";
+            string dateFrom = lastIncome?.ToString("yyyy-MM-dd") ?? "2023-04-01";
             string apiUrlBase = "https://statistics-api.wildberries.ru/api/v1/supplier/incomes?dateFrom=";
 
             try
@@ -266,13 +269,18 @@ namespace Ecom.API.Services
         /// Загрузка склада
         /// </summary>
         /// <returns></returns>
-        public async Task LoadStocks()
+        public async Task LoadStocks(int? id = null)
         {
             int stocksCount = 0;
             int storesCount = 0;
             int error = 0;
 
-            var stores = _context.rise_projects
+            var stores = id is null ? _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList() :
+                _context.rise_projects.Where(x => x.Id == id)
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
                 && x.Token.Length > 155
                 && x.Deleted.Value == false)
@@ -300,7 +308,7 @@ namespace Ecom.API.Services
                     stocksCount += stocks.Count;
 
                     if (stocks.Count > 0)
-                        await BulkInsertEntitiesAsync(stocks, "Stocks", Stocks);
+                        await BulkLoader("Stocks", stocks);
 
                     stopwatch.Stop();
                     TimeSpan elapsed = stopwatch.Elapsed;
@@ -345,7 +353,7 @@ namespace Ecom.API.Services
             var stocks = new List<Stock>();
             var httpClient = _httpClientFactory.CreateClient();
 
-            string apiUrlBase = $"https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2019-06-20";
+            string apiUrlBase = $"https://statistics-api.wildberries.ru/api/v1/supplier/stocks?dateFrom=2023-04-01";
 
             try
             {
@@ -394,7 +402,7 @@ namespace Ecom.API.Services
         /// Загрузка заказов
         /// </summary>
         /// <returns></returns>
-        public async Task LoadOrders()
+        public async Task LoadOrders(int? id = null)
         {
             int newRowCount = 0;
             int foreachStoresCount = 0;
@@ -403,54 +411,63 @@ namespace Ecom.API.Services
             Stopwatch globalStopwatch = new Stopwatch();
             Stopwatch privateStopwatch = new Stopwatch();
 
-            var stores = _context.rise_projects
+            var tasks = new List<Task>();
+            var semaphoreSlim = new SemaphoreSlim(10, 10);
+
+
+            var stores = id is null ? _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList() :
+                _context.rise_projects.Where(x => x.Id == id)
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
                 && x.Token.Length > 155
                 && x.Deleted.Value == false)
                 .ToList();
+
+            Dictionary<int, DateTime?> directory = new Dictionary<int, DateTime?>();
+
+            foreach (var store in stores)
+             directory.Add(store.Id, _context.rise_orders.Where(x => x.ProjectId == store.Id).Max(x => x.LastChangeDate));
+
 
             var messageOrders = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка заказов",
                 parseMode: ParseMode.Markdown);
 
             globalStopwatch.Start();
 
-
             foreach (var store in stores)
             {
 
                 foreachStoresCount++;
 
-                try
+                await semaphoreSlim.WaitAsync();
+
+                tasks.Add(Task.Run(async () =>
                 {
+                    try
+                    {
 
-                    privateStopwatch.Start();
+                        var orders = await FetchOrdersFromApi(store, directory[store.Id]);
 
-                    DateTime? lastOrder = await _context?.rise_orders
-                        ?.Where(x => x.ProjectId == store.Id)
-                        ?.MaxAsync(x => x.Date);
+                        if (orders.Count > 0)
+                            newRowCount += await BulkLoader("rise_orders", orders);
 
-                    var orders = await FetchOrdersFromApi(store, lastOrder);
-                    newRowCount += orders.Count;
-
-                    if (orders.Count > 0)
-                        await BulkInsertEntitiesAsync(orders, "rise_orders");
-
-                    privateStopwatch.Stop();
-                    TimeSpan elapsed = privateStopwatch.Elapsed;
-
-                    await InsertAndEditMessage(messageOrders, MessageOrders, @$"🏦 Магазин `{store.Title}`
-🆕 Загружено строк `{orders.Count} шт.`
-⏱️ Время загрузки заказов `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-
-                }
-                catch (Exception ex)
-                {
-                    errors++;
-
-                    await InsertAndEditMessage(messageOrders, MessageOrders, @$"🏦 Магазин `{store.Title}`
-```{ex.Message.ToString()}```");
-                }
+                        foreachStoresCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        errors++;
+                    }
+                    finally
+                    {
+                        semaphoreSlim.Release();
+                    }
+                }));
             }
+
+            await Task.WhenAll(tasks);
 
             globalStopwatch.Stop();
 
@@ -461,6 +478,8 @@ namespace Ecom.API.Services
 ⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
             MessageOrders.Clear();
+
+            await LoadReportDetails(id);
         }
 
         /// <summary>
@@ -520,7 +539,7 @@ namespace Ecom.API.Services
                     DestinationTableName = tableName
                 };
 
-                if(entitiesOld is not null)
+                if (entitiesOld is not null)
                     await bulk.BulkDeleteAsync(entitiesOld);
 
                 await bulk.BulkInsertAsync(entities);
@@ -546,7 +565,7 @@ namespace Ecom.API.Services
             var orders = new List<rise_order>();
             var httpClient = _httpClientFactory.CreateClient();
 
-            string dateFrom = lastOrder?.ToString("yyyy-MM-ddTHH:mm:ss") ?? DateFrom;
+            string dateFrom = lastOrder?.ToString("yyyy-MM-ddTHH:mm:ss") ?? "2024-02-29";
             string apiUrlBase = "https://statistics-api.wildberries.ru/api/v1/supplier/orders?dateFrom=";
 
             bool fetchMore = true;
@@ -622,12 +641,17 @@ namespace Ecom.API.Services
         /// Получение подробного отчета
         /// </summary>
         /// <returns></returns>
-        public async Task LoadReportDetails()
+        public async Task LoadReportDetails(int? id = null)
         {
             int storeCount = 0;
             int error = 0;
 
-            var stores = _context.rise_projects
+            var stores = id is null ? _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList() :
+                _context.rise_projects.Where(x => x.Id == id)
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
                 && x.Token.Length > 155
                 && x.Deleted.Value == false)
@@ -657,16 +681,24 @@ namespace Ecom.API.Services
 
                     stopwatch.Stop();
 
+
+
                     TimeSpan elapsed = stopwatch.Elapsed;
+
+                    List<FormattableString> formattableStrings = new List<FormattableString>()
+                    {
+                        FormattableStringFactory.Create("CALL RefreshFeeds({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateFeeds({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateABCAnalysis({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateFeedsABCAnalysis({0})", store.Id)
+                    };
+
+                    foreach (var fs in formattableStrings)
+                        await _context.Database.ExecuteSqlAsync(fs);
 
                     await InsertAndEditMessage(messageReportDetails, MessageReportDetails, @$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{reportDetails.Count} шт.`
 ⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-
-                    FormattableString formattableText = $"CALL RefreshFeeds({store.Id});";
-                    FormattableString formattableText2 = $"CALL UpdateFeeds({store.Id});";
-                    await _context.Database.ExecuteSqlAsync(formattableText);
-                    await _context.Database.ExecuteSqlAsync(formattableText2);
                 }
                 catch (Exception ex)
                 {
@@ -686,6 +718,85 @@ namespace Ecom.API.Services
             MessageReportDetails.Clear();
         }
 
+        private async Task<int> BulkLoader<T>(string table, List<T> entities) where T : class
+        {
+            // Получаем свойства класса, исключая определенные свойства
+            var properties = typeof(T).GetProperties().Where(prop => prop.Name != "Id" &&
+                                                                     prop.Name != "Price" &&
+                                                                     prop.Name != "Logistics" &&
+                                                                     prop.Name != "Commission" &&
+                                                                     prop.Name != "OrderCount" &&
+                                                                     prop.Name != "PaymentsWB" &&
+                                                                     prop.Name != "IsOrdered" &&
+                                                                     prop.Name != "TotalPriceDiscount" &&
+                                                                     prop.Name != "IsDispatch");
+
+            // Создаем StringBuilder для CSV содержимого
+            var csvContent = new StringBuilder();
+
+            // Добавляем заголовки столбцов
+            string headerLine = string.Join(",", properties.Select(prop => prop.Name));
+            csvContent.AppendLine(headerLine);
+
+            // Добавляем строки для каждого объекта в коллекции
+            foreach (var entity in entities)
+            {
+                string line = string.Join(",", properties.Select(prop =>
+                {
+                    var value = prop.GetValue(entity);
+
+                    return value switch
+                    {
+                        DateTime dateTimeValue when value != null => dateTimeValue.ToString("yyyy-MM-dd HH:mm:ss"),
+                        bool boolValue when value != null => boolValue ? "1" : "0",
+                        _ => value?.ToString().Replace(",", ";") ?? string.Empty
+                    };
+                }));
+                csvContent.AppendLine(line);
+            }
+
+            // Сохранение во временный файл
+            string tempFilePath = Path.GetTempFileName();
+            await System.IO.File.WriteAllTextAsync(tempFilePath, csvContent.ToString(), Encoding.UTF8);
+
+            // Загрузка в базу данных
+            int count = 0;
+            using (MySqlConnection conn = new MySqlConnection(ConnectionMySQL))
+            {
+                await conn.OpenAsync();
+
+                MySqlBulkLoader bulkLoader = new MySqlBulkLoader(conn)
+                {
+                    Local = true,
+                    TableName = table,
+                    FieldTerminator = ",",
+                    LineTerminator = "\n",
+                    FileName = tempFilePath,
+                    NumberOfLinesToSkip = 1,
+                    CharacterSet = "utf8"
+                };
+
+                // Добавление списка столбцов
+                bulkLoader.Columns.AddRange(properties.Select(p => p.Name));
+
+                try
+                {
+                    count = await bulkLoader.LoadAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Обработка исключения
+                }
+            }
+
+            // Удаление временного файла
+            System.IO.File.Delete(tempFilePath);
+
+            return count;
+        }
+
+
+
         /// <summary>
         /// Отчет о продажах по реализации.
         /// Отчет о продажах по реализации.
@@ -701,7 +812,7 @@ namespace Ecom.API.Services
             var reportDetails = new List<ReportDetail>();
             var httpClient = _httpClientFactory.CreateClient();
 
-            string dateFrom = lastDate.HasValue ? lastDate.Value.AddDays(1).ToString("yyyy-MM-dd") : DateFrom;
+            string dateFrom = lastDate.HasValue ? lastDate.Value.AddDays(1).ToString("yyyy-MM-dd") : "2024-01-29";
             string rrdid = "0";
             string dateTo = DateTime.Now.Date.ToString("yyyy-MM-dd");
 
@@ -740,6 +851,7 @@ namespace Ecom.API.Services
                                 dateFrom = lastReportDetail?.ToString("yyyy-MM-dd");
                                 rrdid = fetchedReportDetails?.LastOrDefault()?.Rrd_id.ToString();
 
+                                if(lastDate is null)
                                 await Task.Delay(TimeSpan.FromMinutes(1));
                             }
                             else
@@ -786,154 +898,24 @@ namespace Ecom.API.Services
         }
         #endregion
 
-        #region Продажи
-
-        /// <summary>
-        /// Загрузка продаж
-        /// </summary>
-        /// <returns></returns>
-        public async Task LoadSales()
-        {
-            int salesCount = 0;
-            int _stores = 0;
-            int error = 0;
-
-            var stores = _context.rise_projects
-               .Where(x => !string.IsNullOrWhiteSpace(x.Token)
-               && x.Token.Length > 155
-               && x.Deleted.Value == false)
-               .ToList();
-
-            var messageSales = await _telegramBot.SendTextMessageAsync("740755376",
-                "Загрузка продаж",
-                parseMode: ParseMode.Markdown);
-
-            Stopwatch _stopwatch = new Stopwatch();
-            _stopwatch.Start();
-
-            foreach (var store in stores)
-            {
-                try
-                {
-                    _stores++;
-                    Stopwatch stopwatch = new Stopwatch();
-                    stopwatch.Start();
-                    DateTime? lastSale = _context?.Sales?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate);
-
-                    var sales = await FetchSalesFromApi(store, lastSale);
-                    salesCount += sales.Count;
-
-                    if (sales.Count > 0)
-                        await BulkInsertEntitiesAsync(sales,"Sales");
-
-                    stopwatch.Stop();
-                    TimeSpan elapsed = stopwatch.Elapsed;
-
-                    await InsertAndEditMessage(messageSales, MessageSales, @$"🏦 Магазин `{store.Title}`
-🆕 Загружено строк `{sales.Count} шт.`
-⏱️ Время загрузки продаж `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-                }
-
-                catch (Exception ex)
-                {
-                    error++;
-
-                    await InsertAndEditMessage(messageSales, MessageSales, @$"🏦 Магазин `{store.Title}`
-```{ex}```");
-                }
-
-            }
-
-            _stopwatch.Stop();
-
-            TimeSpan _elapsed = _stopwatch.Elapsed;
-
-            await InsertAndEditMessage(messageSales, MessageSales, $@"✅ Успешно: `{_stores - error} из {_stores}`
-🆕 Загружено строк `{salesCount} шт.`
-⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
-
-            MessageSales.Clear();
-        }
-
-        /// <summary>
-        ///  Продажи и возвраты.
-        ///  Гарантируется хранение данных не более 90 дней от даты продажи.
-        ///  Данные обновляются раз в 30 минут.
-        ///  Для идентификации заказа следует использовать поле srid.
-        ///  1 строка = 1 продажа/возврат = 1 единица товара.
-        ///  Максимум 1 запрос в минуту
-        /// </summary>
-        /// <param name="store"></param>
-        /// <param name="lastOrder"></param>
-        /// <returns></returns>
-        public async Task<List<Sale>> FetchSalesFromApi(rise_project store, DateTime? lastSale)
-        {
-            string dateFrom = lastSale is null ? $"?dateFrom={DateFrom}" : "?dateFrom=" + lastSale.Value.ToString("yyyy-MM-ddTHH:mm:ss");
-            List<Sale> sales = new List<Sale>();
-
-            try
-            {
-                do
-                {
-                    using (var httpClient = new HttpClient())
-                    {
-
-                        var apiUrl = $"https://statistics-api.wildberries.ru/api/v1/supplier/sales{dateFrom}";
-
-                        var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                        requestMessage.Headers.Add("contentType", "application/json");
-                        requestMessage.Headers.Add("Authorization", store.Token);
-
-                        HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
-
-                        if (response.IsSuccessStatusCode)
-                        {
-                            string responseContent = await response.Content.ReadAsStringAsync();
-
-                            if (lastSale is not null)
-                                sales.AddRange(JsonConvert.DeserializeObject<List<Sale>>(responseContent)?.Where(x => x.Date > lastSale)?.ToList());
-                            else
-                                sales.AddRange(JsonConvert.DeserializeObject<List<Sale>>(responseContent)?.ToList());
-
-                            foreach (var order in sales)
-                                order.ProjectId = store.Id;
-                        }
-
-                    }
-
-                    var data = sales?.Max(x => x?.LastChangeDate.Value)?.Date;
-
-                    if (data is null) break;
-
-                    if (data != DateTime.Now.Date)
-                    {
-                        dateFrom = "?dateFrom=" + data?.ToString("yyyy-MM-ddTHH:mm:ss");
-                        await Task.Delay(TimeSpan.FromMinutes(1));
-                    }
-
-
-                } while (sales?.Max(x => x?.LastChangeDate.Value.Date) != DateTime.Now.Date);
-            }
-            catch
-            {
-                return sales;
-            }
-
-            return sales;
-        }
-        #endregion
-
         #region Юнит
 
         /// <summary>
         /// Загрузка продаж
         /// </summary>
         /// <returns></returns>
-        public async Task LoadUnits()
+        public async Task LoadUnits(int? id = null)
         {
-            var stores = _context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
-            && x.Token.Length > 155
-            && x.Deleted.Value == false).ToList();
+            var stores = id is null ? _context.rise_projects.Where(x => x.Id == 39)
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList() :
+                _context.rise_projects.Where(x => x.Id == id)
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList();
 
 
             int unitsCount = 0;
@@ -1007,29 +989,17 @@ namespace Ecom.API.Services
                     int minutes = elapsed.Minutes;
                     int seconds = elapsed.Seconds;
 
-                    MessageUnits[messageUnits.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+                    await InsertAndEditMessage(messageUnits, MessageUnits, @$"🏦 Магазин `{store.Title}`
 🔄 Обновлено строк `{UpdateRowUnits} шт.`
 🆕 Загружено строк `{uniqueUnits.Count} шт.`
 ⏱️ Время загрузки юнит `{hours} ч {minutes} м. {seconds} с.`");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                       MessageUnits.Where(kv => kv.Key == messageUnits.MessageId)
-                       .SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageUnits, _text);
                 }
                 catch (Exception ex)
                 {
                     error++;
 
-                    MessageUnits[messageUnits.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-```{ex}```");
-
-                    string _text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                        MessageUnits.Where(kv => kv.Key == messageUnits.MessageId)
-                        .SelectMany(kv => kv.Value));
-
-                    await EditMessage(messageUnits, _text);
+                    await InsertAndEditMessage(messageUnits, MessageUnits, @$"🏦 Магазин `{store.Title}`
+" + ex.Message.ToString());
                 }
             }
 
@@ -1040,14 +1010,9 @@ namespace Ecom.API.Services
             int _minutes = _elapsed.Minutes;
             int _seconds = _elapsed.Seconds;
 
-            MessageUnits[messageUnits.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
+            await InsertAndEditMessage(messageUnits, MessageUnits, $@"✅ Успешно: `{_stores - error} из {_stores}`
 🆕 Загружено строк `{unitsCount} шт.`
 ⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
-
-            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-                MessageUnits.Where(kv => kv.Key == messageUnits.MessageId).SelectMany(kv => kv.Value));
-
-            await EditMessage(messageUnits, text);
 
             MessageUnits.Clear();
         }
@@ -1430,11 +1395,18 @@ namespace Ecom.API.Services
         /// Загрузка карточек Wildberries
         /// </summary>
         /// <returns></returns>
-        public async Task CardsWildberries()
+        public async Task CardsWildberries(int? id = null)
         {
-            var stores = _context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
-            && x.Token.Length > 155
-            && x.Deleted.Value == false).ToList();
+            var stores = id is null ? _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList() :
+                _context.rise_projects.Where(x => x.Id == id)
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList();
 
 
             int cardsCount = 0;
@@ -1636,11 +1608,18 @@ namespace Ecom.API.Services
         /// Загрузка рекламных кампаний
         /// </summary>
         /// <returns></returns>
-        public async Task LoadAdverts()
+        public async Task LoadAdverts(int? id = null)
         {
-            var stores = _context.rise_projects.Where(x => !string.IsNullOrWhiteSpace(x.Token)
-           && x.Token.Length > 155
-           && x.Deleted.Value == false).ToList();
+            var stores = id is null ? _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList() :
+                _context.rise_projects.Where(x => x.Id == id)
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList();
 
 
             int AdvertsCount = 0;
@@ -2077,6 +2056,26 @@ namespace Ecom.API.Services
             catch (Exception)
             {
                 return advertsList;
+            }
+        }
+
+        #endregion
+
+        #region Загрузка магазина
+
+        public async Task LoadStore(int id)
+        {
+            try
+            {
+                await CardsWildberries(id);
+                await LoadIncomes(id);
+                await LoadStocks(id);
+                await LoadOrders(id);
+                await LoadUnits(id);
+                await LoadAdverts(id);
+            }
+            catch (Exception ex)
+            {
             }
         }
         #endregion

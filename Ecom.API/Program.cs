@@ -52,46 +52,14 @@ builder.Services.AddQuartz(q =>
 {
     q.UseMicrosoftDependencyInjectionJobFactory();
 
-    #region Поставки
+    //#region Поставки
 
-    var jobKeyLoadIncomes = new JobKey("LoadIncomes");
-    q.AddJob<LoadIncomes>(opts => opts.WithIdentity(jobKeyLoadIncomes));
-
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadIncomes)
-    .WithIdentity($"{jobKeyLoadIncomes}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(30)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
-
-    #region Склад
-
-    var jobKeyLoadStocks = new JobKey("LoadStocks");
-    q.AddJob<LoadStocks>(opts => opts.WithIdentity(jobKeyLoadStocks));
-
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadStocks)
-    .WithIdentity($"{jobKeyLoadStocks}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(30)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
-
-    //#region Продажи
-
-    //var jobKeyLoadSales = new JobKey("LoadSales");
-    //q.AddJob<LoadSales>(opts => opts.WithIdentity(jobKeyLoadSales));
+    //var jobKeyLoadIncomes = new JobKey("LoadIncomes");
+    //q.AddJob<LoadIncomes>(opts => opts.WithIdentity(jobKeyLoadIncomes));
 
     //q.AddTrigger(opts => opts
-    //.ForJob(jobKeyLoadSales)
-    //.WithIdentity($"{jobKeyLoadSales}-trigger")
+    //.ForJob(jobKeyLoadIncomes)
+    //.WithIdentity($"{jobKeyLoadIncomes}-trigger")
     //.StartNow()
     //.WithSimpleSchedule(x => x
     //.WithIntervalInMinutes(30)
@@ -100,71 +68,87 @@ builder.Services.AddQuartz(q =>
     //);
     //#endregion
 
-    #region Заказы
+    //#region Склад
 
-    var jobKeyLoadOrders = new JobKey("LoadOrders");
-    q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));
+    //var jobKeyLoadStocks = new JobKey("LoadStocks");
+    //q.AddJob<LoadStocks>(opts => opts.WithIdentity(jobKeyLoadStocks));
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadOrders)
-    .WithIdentity($"{jobKeyLoadOrders}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(30)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadStocks)
+    //.WithIdentity($"{jobKeyLoadStocks}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(60)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
-    #region Юнит
+    //#region Заказы
 
-    var jobKeyLoadUnits = new JobKey("LoadUnits");
-    q.AddJob<LoadUnits>(opts => opts.WithIdentity(jobKeyLoadUnits));
+    //var jobKeyLoadOrders = new JobKey("LoadOrders");
+    //q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadUnits)
-    .WithIdentity($"{jobKeyLoadUnits}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(30)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadOrders)
+    //.WithIdentity($"{jobKeyLoadOrders}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(30)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
-    #region Рекламные кампании
-    var jobKeyLoadAdverts = new JobKey("LoadAdverts");
-    q.AddJob<LoadAdverts>(opts => opts.WithIdentity(jobKeyLoadAdverts));
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadAdverts)
-    .WithIdentity($"{jobKeyLoadAdverts}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInHours(12)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+    //#region Юнит
 
-    #region Карточки
+    //var jobKeyLoadUnits = new JobKey("LoadUnits");
+    //q.AddJob<LoadUnits>(opts => opts.WithIdentity(jobKeyLoadUnits));
 
-    var jobKeyLoadCardsWildberries = new JobKey("LoadCardsWildberries");
-    q.AddJob<LoadCards>(opts => opts.WithIdentity(jobKeyLoadCardsWildberries));
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadUnits)
+    //.WithIdentity($"{jobKeyLoadUnits}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(30)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
-    q.AddTrigger(opts => opts
-   .ForJob(jobKeyLoadCardsWildberries)
-   .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger-now")
-   .StartNow()
-   .WithSimpleSchedule(x => x.Build())
-   );
+    //  #region Рекламные кампании
+    //  var jobKeyLoadAdverts = new JobKey("LoadAdverts");
+    //  q.AddJob<LoadAdverts>(opts => opts.WithIdentity(jobKeyLoadAdverts));
+    //  q.AddTrigger(opts => opts
+    //  .ForJob(jobKeyLoadAdverts)
+    //  .WithIdentity($"{jobKeyLoadAdverts}-trigger")
+    //  .StartNow()
+    //  .WithSimpleSchedule(x => x
+    //  .WithIntervalInHours(12)
+    //  .RepeatForever()
+    //  .Build())
+    //  );
+    //  #endregion
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadCardsWildberries)
-    .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger")
-    .WithCronSchedule("0 1 0 * * ?")
-    .StartNow()
-     );
-    #endregion
+    //  #region Карточки
+
+    //  var jobKeyLoadCardsWildberries = new JobKey("LoadCardsWildberries");
+    //  q.AddJob<LoadCards>(opts => opts.WithIdentity(jobKeyLoadCardsWildberries));
+
+    //  q.AddTrigger(opts => opts
+    // .ForJob(jobKeyLoadCardsWildberries)
+    // .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger-now")
+    // .StartNow()
+    // .WithSimpleSchedule(x => x.Build())
+    // );
+
+    //  q.AddTrigger(opts => opts
+    //  .ForJob(jobKeyLoadCardsWildberries)
+    //  .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger")
+    //  .WithCronSchedule("0 1 0 * * ?")
+    //  .StartNow()
+    //   );
+    //  #endregion
 
     #region Конкуренты
 

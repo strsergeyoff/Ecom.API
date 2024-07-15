@@ -211,7 +211,7 @@
         /// <summary>
         /// Размер снижения кВВ из-за акции
         /// </summary>
-        public int? Is_kgvp_v2 { get; set; }
+        public decimal? Is_kgvp_v2 { get; set; }
 
         /// <summary>
         /// Вознаграждение с продаж до вычета услуг поверенного, без НДС

@@ -8,43 +8,38 @@ namespace Ecom.API.Services
         /// Поставки
         /// </summary>
         /// <returns></returns>
-        Task LoadIncomes();
+        Task LoadIncomes(int? id = null);
 
         /// <summary>
         /// Склад
         /// </summary>
         /// <returns></returns>
-        Task LoadStocks();
+        Task LoadStocks(int? id = null);
 
         /// <summary>
         /// Заказы
         /// </summary>
         /// <returns></returns>
-        Task LoadOrders();
+        Task LoadOrders(int? id = null);
 
-        /// <summary>
-        /// Продажи
-        /// </summary>
-        /// <returns></returns>
-        Task LoadSales();
 
         /// <summary>
         /// Подробный отчет
         /// </summary>
         /// <returns></returns>
-        Task LoadReportDetails();
+        Task LoadReportDetails(int? id = null);
 
         /// <summary>
         /// Юнит
         /// </summary>
         /// <returns></returns>
-        Task LoadUnits();
+        Task LoadUnits(int? id = null);
 
         /// <summary>
         /// Карточки Wildberries
         /// </summary>
         /// <returns></returns>
-        Task CardsWildberries();
+        Task CardsWildberries(int? id = null);
 
         /// <summary>
         /// Конкуренты
@@ -52,11 +47,13 @@ namespace Ecom.API.Services
         /// <returns></returns>
         Task LoadCompetitors();
 
+        Task LoadStore(int id);
+
         /// <summary>
         /// Рекламные кампании
         /// </summary>
         /// <returns></returns>
-        Task LoadAdverts();
+        Task LoadAdverts(int? id = null);
     }
 }
  
