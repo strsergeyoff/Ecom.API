@@ -7,6 +7,8 @@ using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.UseUrls("https://localhost:443");
+
 // Add services to the container.
 
 builder.Services.AddControllers();
