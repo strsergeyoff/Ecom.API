@@ -20,7 +20,7 @@ namespace Ecom.API.Services
     {
         #region Поля и свойства
 
-        private readonly string ConnectionMySQL = "Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F;AllowLoadLocalInfile=true;Charset=utf8";
+        private readonly string ConnectionMySQL = "Server=93.183.104.188;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F;AllowLoadLocalInfile=true;Charset=utf8";
 
         private const string WbSmallImageUrlTemplate = "https://basket-#id#.wb.ru/vol#count4#/part#count6#/#article#/images/tm/#number#.jpg";
 
@@ -131,8 +131,10 @@ namespace Ecom.API.Services
         {
             int incomesCount = 0;
             int storesCount = 0;
-            int error = 0;
+            int errors = 0;
 
+            var tasks = new List<Task>();
+            var semaphoreSlim = new SemaphoreSlim(10, 10);
 
             var stores = id is null ? _context.rise_projects
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
@@ -148,57 +150,60 @@ namespace Ecom.API.Services
             Dictionary<int, DateTime?> storesLastDates = new Dictionary<int, DateTime?>();
 
             foreach (var store in stores)
-                storesLastDates.Add(store.Id, _context?.Incomes?.Where(x => x.ProjectId == store.Id)?.Max(x => x.LastChangeDate));
+                storesLastDates.Add(store.Id, await _context?.Incomes?.Where(x => x.ProjectId == store.Id)?.MaxAsync(x => x.LastChangeDate));
 
 
             var messageIncomes = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка поставок",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+
+            MessageIncomes.Add(messageIncomes.MessageId, new List<string>());
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
 
             foreach (var store in stores)
             {
-
-                try
+                tasks.Add(Task.Run(async () =>
                 {
-                    storesCount++;
-                    Stopwatch stopwatch = new Stopwatch();
-                    stopwatch.Start();
+                    try
+                    {
+                        Stopwatch stopwatch = new Stopwatch();
+                        stopwatch.Start();
 
-                    DateTime? lastOrder = await _context?.Incomes
-                       ?.Where(x => x.ProjectId == store.Id)
-                       ?.MaxAsync(x => x.LastChangeDate);
+                        var incomes = await FetchIncomesFromApi(store, storesLastDates[store.Id]);
 
-                    var incomes = await FetchIncomesFromApi(store, lastOrder);
+                        if (incomes.Count > 0)
+                            incomesCount += await BulkLoader("Incomes", incomes);
 
-                    incomesCount += incomes.Count;
+                        storesCount++;
 
-                    if (incomes.Count > 0)
-                        await BulkLoader("Incomes", incomes);
+                        stopwatch.Stop();
+                        TimeSpan elapsed = stopwatch.Elapsed;
 
-                    stopwatch.Stop();
-
-                    TimeSpan elapsed = stopwatch.Elapsed;
-
-                    await InsertAndEditMessage(messageIncomes, MessageIncomes, @$"🏦 Магазин `{store.Title}`
+                        MessageIncomes[messageIncomes.MessageId].Add(@$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{incomes.Count} шт.`
 ⏱️ Время загрузки поставок `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-                }
-                catch (Exception ex)
-                {
-                    error++;
-
-                    await InsertAndEditMessage(messageIncomes, MessageIncomes, @$"🏦 Магазин `{store.Title}`
-```{ex.Message.ToString()}```");
-                }
+                    }
+                    catch (Exception ex)
+                    {
+                        errors++;
+                        MessageIncomes[messageIncomes.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+`{ex.Message.ToString()}`");
+                    }
+                    finally
+                    {
+                        semaphoreSlim.Release();
+                    }
+                }));
             }
+
+            await Task.WhenAll(tasks);
 
             _stopwatch.Stop();
 
             TimeSpan _elapsed = _stopwatch.Elapsed;
 
-            await InsertAndEditMessage(messageIncomes, MessageIncomes, $@"✅ Успешно: `{storesCount - error} из {storesCount}`
+            await InsertAndEditMessage(messageIncomes, MessageIncomes, $@"✅ Успешно: `{storesCount - errors} из {storesCount}`
 🆕 Загружено строк `{incomesCount} шт.`
 ⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
@@ -429,7 +434,7 @@ namespace Ecom.API.Services
             Dictionary<int, DateTime?> directory = new Dictionary<int, DateTime?>();
 
             foreach (var store in stores)
-             directory.Add(store.Id, _context.rise_orders.Where(x => x.ProjectId == store.Id).Max(x => x.LastChangeDate));
+                directory.Add(store.Id, _context.rise_orders.Where(x => x.ProjectId == store.Id).Max(x => x.LastChangeDate));
 
 
             var messageOrders = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка заказов",
@@ -718,6 +723,8 @@ namespace Ecom.API.Services
             MessageReportDetails.Clear();
         }
 
+
+
         private async Task<int> BulkLoader<T>(string table, List<T> entities) where T : class
         {
             // Получаем свойства класса, исключая определенные свойства
@@ -785,6 +792,7 @@ namespace Ecom.API.Services
                 }
                 catch (Exception ex)
                 {
+                    throw ex;
                     // Обработка исключения
                 }
             }
@@ -851,8 +859,8 @@ namespace Ecom.API.Services
                                 dateFrom = lastReportDetail?.ToString("yyyy-MM-dd");
                                 rrdid = fetchedReportDetails?.LastOrDefault()?.Rrd_id.ToString();
 
-                                if(lastDate is null)
-                                await Task.Delay(TimeSpan.FromMinutes(1));
+                                if (lastDate is null)
+                                    await Task.Delay(TimeSpan.FromMinutes(1));
                             }
                             else
                                 fetchMore = false;
