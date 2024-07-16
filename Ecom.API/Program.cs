@@ -52,39 +52,39 @@ builder.Services.AddQuartz(q =>
 {
     q.UseMicrosoftDependencyInjectionJobFactory();
 
-    #region Поставки
+    //#region Поставки
 
-    var jobKeyLoadIncomes = new JobKey("LoadIncomes");
-    q.AddJob<LoadIncomes>(opts => opts.WithIdentity(jobKeyLoadIncomes));
+    //var jobKeyLoadIncomes = new JobKey("LoadIncomes");
+    //q.AddJob<LoadIncomes>(opts => opts.WithIdentity(jobKeyLoadIncomes));
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadIncomes)
-    .WithIdentity($"{jobKeyLoadIncomes}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(30)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadIncomes)
+    //.WithIdentity($"{jobKeyLoadIncomes}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(30)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
-    #region Склад
+    //#region Склад
 
-    var jobKeyLoadStocks = new JobKey("LoadStocks");
-    q.AddJob<LoadStocks>(opts => opts.WithIdentity(jobKeyLoadStocks));
+    //var jobKeyLoadStocks = new JobKey("LoadStocks");
+    //q.AddJob<LoadStocks>(opts => opts.WithIdentity(jobKeyLoadStocks));
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadStocks)
-    .WithIdentity($"{jobKeyLoadStocks}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(60)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadStocks)
+    //.WithIdentity($"{jobKeyLoadStocks}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(60)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
-    #region Заказы/
+    #region Заказы
 
     var jobKeyLoadOrders = new JobKey("LoadOrders");
     q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));

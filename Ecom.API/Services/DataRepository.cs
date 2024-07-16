@@ -9,6 +9,7 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
@@ -458,7 +459,7 @@ namespace Ecom.API.Services
             Dictionary<int, DateTime?> directory = new Dictionary<int, DateTime?>();
 
             foreach (var store in stores)
-                directory.Add(store.Id, _context.rise_orders.Where(x => x.ProjectId == store.Id).Max(x => x.LastChangeDate));
+                directory.Add(store.Id, await _context.rise_orders.Where(x => x.ProjectId == store.Id).MaxAsync(x => x.LastChangeDate));
 
 
             var messageOrders = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка заказов",
@@ -524,10 +525,10 @@ namespace Ecom.API.Services
 
             MessageOrders.Clear();
 
-            //if(id is not null)
-            //await LoadReportDetails(id);
-            //else
-            //    await LoadReportDetails();
+            if (id is not null)
+                await LoadReportDetails(id);
+            else
+                await LoadReportDetails();
         }
 
         /// <summary>
@@ -691,8 +692,12 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadReportDetails(int? id = null)
         {
+            var tasks = new List<Task>();
+            var semaphoreSlim = new SemaphoreSlim(10, 10);
+
             int storeCount = 0;
-            int error = 0;
+            int errors = 0;
+            int newRows = 0;
 
             var stores = id is null ? _context.rise_projects
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
@@ -708,32 +713,46 @@ namespace Ecom.API.Services
             var messageReportDetails = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
+            MessageReportDetails.Add(messageReportDetails.MessageId, new List<string>());
+
+            Dictionary<int, DateTime?> directory = new Dictionary<int, DateTime?>();
+
+            foreach (var store in stores)
+                directory.Add(store.Id, await _context.ReportDetails.Where(x => x.ProjectId == store.Id).MaxAsync(x => x.Create_dt));
+
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
+
 
             foreach (var store in stores)
             {
 
-                storeCount++;
+                await semaphoreSlim.WaitAsync();
 
-                try
+                tasks.Add(Task.Run(async () =>
                 {
-                    Stopwatch stopwatch = new Stopwatch();
-                    stopwatch.Start();
+                    storeCount++;
+                    await semaphoreSlim.WaitAsync();
 
-                    DateTime? lastDate = _context?.ReportDetails?.Where(x => x.ProjectId == store.Id)?.Max(x => x.Create_dt);
-                    var reportDetails = await FetchReportDetailsFromApi(store, lastDate);
+                    try
+                    {
+                        Stopwatch stopwatch = new Stopwatch();
+                        stopwatch.Start();
 
-                    if (reportDetails.Count > 0)
-                        await BulkInsertEntitiesAsync(reportDetails, "ReportDetails");
+                        var reportDetails = await FetchReportDetailsFromApi(store, directory[store.Id]);
 
-                    stopwatch.Stop();
+                        newRows += reportDetails.Count;
+
+                        if (reportDetails.Count > 0)
+                            await BulkLoader("ReportDetails", reportDetails);
+
+                        stopwatch.Stop();
 
 
 
-                    TimeSpan elapsed = stopwatch.Elapsed;
+                        TimeSpan elapsed = stopwatch.Elapsed;
 
-                    List<FormattableString> formattableStrings = new List<FormattableString>()
+                        List<FormattableString> formattableStrings = new List<FormattableString>()
                     {
                         FormattableStringFactory.Create("CALL RefreshFeeds({0})", store.Id),
                         FormattableStringFactory.Create("CALL UpdateFeeds({0})", store.Id),
@@ -741,26 +760,33 @@ namespace Ecom.API.Services
                         FormattableStringFactory.Create("CALL UpdateFeedsABCAnalysis({0})", store.Id)
                     };
 
-                    foreach (var fs in formattableStrings)
-                        await _context.Database.ExecuteSqlAsync(fs);
+                        foreach (var fs in formattableStrings)
+                            await _context.Database.ExecuteSqlAsync(fs);
 
-                    await InsertAndEditMessage(messageReportDetails, MessageReportDetails, @$"🏦 Магазин `{store.Title}`
+                        MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{reportDetails.Count} шт.`
 ⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-                }
-                catch (Exception ex)
-                {
-                    error++;
-                    await InsertAndEditMessage(messageReportDetails, MessageReportDetails, @$"🏦 Магазин `{store.Title}`
-```{ex.Message.ToString()}```");
-                }
+                    }
+                    catch (Exception ex)
+                    {
+                        errors++;
+                        MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+`{ex.Message.ToString()}`");
+                    }
+                    finally
+                    {
+                        semaphoreSlim.Release();
+                    }
+                }));
             }
+
+            await Task.WhenAll(tasks);
 
             _stopwatch.Stop();
 
             TimeSpan _elapsed = _stopwatch.Elapsed;
 
-            await InsertAndEditMessage(messageReportDetails, MessageReportDetails, $@"✅ Успешно: `{storeCount - error} из {storeCount}`
+            await InsertAndEditMessage(messageReportDetails, MessageReportDetails, $@"✅ Успешно: `{storeCount - errors} из {storeCount}`
 ⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
             MessageReportDetails.Clear();
