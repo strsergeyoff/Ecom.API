@@ -992,16 +992,16 @@ namespace Ecom.API.Services
             var tasks = new List<Task>();
             var semaphoreSlim = new SemaphoreSlim(10, 10);
 
-            var stores = id is null ? _context.rise_projects.Where(x => x.Id == 39)
-                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
-                && x.Token.Length > 155
-                && x.Deleted.Value == false)
-                .ToList() :
-                _context.rise_projects.Where(x => x.Id == id)
-                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
-                && x.Token.Length > 155
-                && x.Deleted.Value == false)
-                .ToList();
+            var stores = id is null ? _context.rise_projects
+                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                 && x.Token.Length > 155
+                 && x.Deleted.Value == false)
+                 .ToList() :
+                 _context.rise_projects.Where(x => x.Id == id)
+                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                 && x.Token.Length > 155
+                 && x.Deleted.Value == false)
+                 .ToList();
 
 
             int unitsCount = 0;
