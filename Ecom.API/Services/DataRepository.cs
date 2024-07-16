@@ -1448,97 +1448,97 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task CardsWildberries(int? id = null)
         {
-//            var stores = id is null ? _context.rise_projects
-//                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
-//                && x.Token.Length > 155
-//                && x.Deleted.Value == false)
-//                .ToList() :
-//                _context.rise_projects.Where(x => x.Id == id)
-//                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
-//                && x.Token.Length > 155
-//                && x.Deleted.Value == false)
-//                .ToList();
+            var stores = id is null ? _context.rise_projects
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList() :
+                _context.rise_projects.Where(x => x.Id == id)
+                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                && x.Token.Length > 155
+                && x.Deleted.Value == false)
+                .ToList();
 
 
-//            int cardsCount = 0;
-//            int _stores = 0;
-//            int error = 0;
-//            var messageCards = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка карточек валбериз",
-//                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+            //            int cardsCount = 0;
+            //            int _stores = 0;
+            //            int error = 0;
+            //            var messageCards = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка карточек валбериз",
+            //                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
-//            MessageCards.Add(messageCards.MessageId, new List<string>());
+            //            MessageCards.Add(messageCards.MessageId, new List<string>());
 
-//            Stopwatch _stopwatch = new Stopwatch();
-//            _stopwatch.Start();
-
-
-//            var tasks = new List<Task>();
-//            var semaphoreSlim = new SemaphoreSlim(10, 10);
-
-//            //Старые карточки
-//            List<Card> cardWildberriesOld = await _context.Cards.ToListAsync();
-
-//            _context.Cards.RemoveRange(cardWildberriesOld);
-//            await _context.SaveChangesAsync();
-
-//            foreach (var store in stores)
-//            {
-//                tasks.Add(Task.Run(async () =>
-//                {
-//                    await semaphoreSlim.WaitAsync();
-
-//                    try
-//                    {
-//                        Stopwatch stopwatch = new Stopwatch();
-//                        stopwatch.Start();
-
-//                        var cards = await FetchCardWildberriesFromApi(store);
-
-//                        if (cards.Count > 0)
-//                            await BulkLoader("Cards", cards);
+            //            Stopwatch _stopwatch = new Stopwatch();
+            //            _stopwatch.Start();
 
 
-//                        storesCount++;
+            //            var tasks = new List<Task>();
+            //            var semaphoreSlim = new SemaphoreSlim(10, 10);
 
-//                        stopwatch.Stop();
-//                        TimeSpan elapsed = stopwatch.Elapsed;
+            //            //Старые карточки
+            //            List<Card> cardWildberriesOld = await _context.Cards.ToListAsync();
 
-//                        MessageIncomes[messageIncomes.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-//🆕 Загружено строк `{incomes.Count} шт.`
-//⏱️ Время загрузки поставок `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-//                    }
-//                    catch (Exception ex)
-//                    {
-//                        errors++;
-//                        MessageIncomes[messageIncomes.MessageId].Add(@$"🏦 Магазин `{store.Title}`
-//`{ex.Message.ToString()}`");
-//                    }
-//                    finally
-//                    {
-//                        semaphoreSlim.Release();
-//                    }
-//                }));
-//            }
+            //            _context.Cards.RemoveRange(cardWildberriesOld);
+            //            await _context.SaveChangesAsync();
 
-//            await Task.WhenAll(tasks);
+            //            foreach (var store in stores)
+            //            {
+            //                tasks.Add(Task.Run(async () =>
+            //                {
+            //                    await semaphoreSlim.WaitAsync();
 
-//            _stopwatch.Stop();
+            //                    try
+            //                    {
+            //                        Stopwatch stopwatch = new Stopwatch();
+            //                        stopwatch.Start();
 
-//            TimeSpan _elapsed = _stopwatch.Elapsed;
-//            int _hours = _elapsed.Hours;
-//            int _minutes = _elapsed.Minutes;
-//            int _seconds = _elapsed.Seconds;
+            //                        var cards = await FetchCardWildberriesFromApi(store);
 
-//            MessageCards[messageCards.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
-//🆕 Загружено строк `{cardsCount} шт.`
-//⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
+            //                        if (cards.Count > 0)
+            //                            await BulkLoader("Cards", cards);
 
-//            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
-//                MessageCards.Where(kv => kv.Key == messageCards.MessageId).SelectMany(kv => kv.Value));
 
-//            await EditMessage(messageCards, text);
+            //                        storesCount++;
 
-//            MessageCards.Clear();
+            //                        stopwatch.Stop();
+            //                        TimeSpan elapsed = stopwatch.Elapsed;
+
+            //                        MessageIncomes[messageIncomes.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+            //🆕 Загружено строк `{incomes.Count} шт.`
+            //⏱️ Время загрузки поставок `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
+            //                    }
+            //                    catch (Exception ex)
+            //                    {
+            //                        errors++;
+            //                        MessageIncomes[messageIncomes.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+            //`{ex.Message.ToString()}`");
+            //                    }
+            //                    finally
+            //                    {
+            //                        semaphoreSlim.Release();
+            //                    }
+            //                }));
+            //            }
+
+            //            await Task.WhenAll(tasks);
+
+            //            _stopwatch.Stop();
+
+            //            TimeSpan _elapsed = _stopwatch.Elapsed;
+            //            int _hours = _elapsed.Hours;
+            //            int _minutes = _elapsed.Minutes;
+            //            int _seconds = _elapsed.Seconds;
+
+            //            MessageCards[messageCards.MessageId].Add($@"✅ Успешно: `{_stores - error} из {_stores}`
+            //🆕 Загружено строк `{cardsCount} шт.`
+            //⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
+
+            //            string text = string.Join($"{Environment.NewLine}{Environment.NewLine}",
+            //                MessageCards.Where(kv => kv.Key == messageCards.MessageId).SelectMany(kv => kv.Value));
+
+            //            await EditMessage(messageCards, text);
+
+            //            MessageCards.Clear();
 
         }
 
