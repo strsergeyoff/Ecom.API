@@ -100,74 +100,74 @@ builder.Services.AddQuartz(q =>
     );
     #endregion
 
-    #region Юнит
+    //#region Юнит
 
-    var jobKeyLoadUnits = new JobKey("LoadUnits");
-    q.AddJob<LoadUnits>(opts => opts.WithIdentity(jobKeyLoadUnits));
+    //var jobKeyLoadUnits = new JobKey("LoadUnits");
+    //q.AddJob<LoadUnits>(opts => opts.WithIdentity(jobKeyLoadUnits));
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadUnits)
-    .WithIdentity($"{jobKeyLoadUnits}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(30)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadUnits)
+    //.WithIdentity($"{jobKeyLoadUnits}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(30)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
-    #region Рекламные кампании
-    var jobKeyLoadAdverts = new JobKey("LoadAdverts");
-    q.AddJob<LoadAdverts>(opts => opts.WithIdentity(jobKeyLoadAdverts));
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadAdverts)
-    .WithIdentity($"{jobKeyLoadAdverts}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInHours(12)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+  //  #region Рекламные кампании
+  //  var jobKeyLoadAdverts = new JobKey("LoadAdverts");
+  //  q.AddJob<LoadAdverts>(opts => opts.WithIdentity(jobKeyLoadAdverts));
+  //  q.AddTrigger(opts => opts
+  //  .ForJob(jobKeyLoadAdverts)
+  //  .WithIdentity($"{jobKeyLoadAdverts}-trigger")
+  //  .StartNow()
+  //  .WithSimpleSchedule(x => x
+  //  .WithIntervalInHours(12)
+  //  .RepeatForever()
+  //  .Build())
+  //  );
+  //  #endregion
 
-    #region Карточки
+  //  #region Карточки
 
-    var jobKeyLoadCardsWildberries = new JobKey("LoadCardsWildberries");
-    q.AddJob<LoadCards>(opts => opts.WithIdentity(jobKeyLoadCardsWildberries));
+  //  var jobKeyLoadCardsWildberries = new JobKey("LoadCardsWildberries");
+  //  q.AddJob<LoadCards>(opts => opts.WithIdentity(jobKeyLoadCardsWildberries));
 
-    q.AddTrigger(opts => opts
-   .ForJob(jobKeyLoadCardsWildberries)
-   .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger-now")
-   .StartNow()
-   .WithSimpleSchedule(x => x.Build())
-   );
+  //  q.AddTrigger(opts => opts
+  // .ForJob(jobKeyLoadCardsWildberries)
+  // .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger-now")
+  // .StartNow()
+  // .WithSimpleSchedule(x => x.Build())
+  // );
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadCardsWildberries)
-    .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger")
-    .WithCronSchedule("0 1 0 * * ?")
-    .StartNow()
-     );
-    #endregion
+  //  q.AddTrigger(opts => opts
+  //  .ForJob(jobKeyLoadCardsWildberries)
+  //  .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger")
+  //  .WithCronSchedule("0 1 0 * * ?")
+  //  .StartNow()
+  //   );
+  //  #endregion
 
-    #region Конкуренты
+  //  #region Конкуренты
 
-    var jobKeyLoadCompetitors = new JobKey("LoadCompetitors");
-    q.AddJob<LoadCompetitors>(opts => opts.WithIdentity(jobKeyLoadCompetitors));
+  //  var jobKeyLoadCompetitors = new JobKey("LoadCompetitors");
+  //  q.AddJob<LoadCompetitors>(opts => opts.WithIdentity(jobKeyLoadCompetitors));
 
-    q.AddTrigger(opts => opts
-  .ForJob(jobKeyLoadCompetitors)
-  .WithIdentity($"{jobKeyLoadCompetitors}-trigger-now")
-  .StartNow()
-  .WithSimpleSchedule(x => x.Build())
-  );
+  //  q.AddTrigger(opts => opts
+  //.ForJob(jobKeyLoadCompetitors)
+  //.WithIdentity($"{jobKeyLoadCompetitors}-trigger-now")
+  //.StartNow()
+  //.WithSimpleSchedule(x => x.Build())
+  //);
 
-    q.AddTrigger(opts => opts
-        .ForJob(jobKeyLoadCompetitors)
-        .WithIdentity($"{jobKeyLoadCompetitors}-trigger")
-        .WithCronSchedule("0 1 0 * * ?")
-        );
-    #endregion
+  //  q.AddTrigger(opts => opts
+  //      .ForJob(jobKeyLoadCompetitors)
+  //      .WithIdentity($"{jobKeyLoadCompetitors}-trigger")
+  //      .WithCronSchedule("0 1 0 * * ?")
+  //      );
+  //  #endregion
 
 });
 

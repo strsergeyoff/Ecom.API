@@ -752,17 +752,6 @@ namespace Ecom.API.Services
 
                         TimeSpan elapsed = stopwatch.Elapsed;
 
-                        List<FormattableString> formattableStrings = new List<FormattableString>()
-                    {
-                        FormattableStringFactory.Create("CALL RefreshFeeds({0})", store.Id),
-                        FormattableStringFactory.Create("CALL UpdateFeeds({0})", store.Id),
-                        FormattableStringFactory.Create("CALL UpdateABCAnalysis({0})", store.Id),
-                        FormattableStringFactory.Create("CALL UpdateFeedsABCAnalysis({0})", store.Id)
-                    };
-
-                        foreach (var fs in formattableStrings)
-                            await _context.Database.ExecuteSqlAsync(fs);
-
                         MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{reportDetails.Count} шт.`
 ⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
@@ -781,6 +770,20 @@ namespace Ecom.API.Services
             }
 
             await Task.WhenAll(tasks);
+
+            foreach (var store in stores)
+            {
+                List<FormattableString> formattableStrings = new List<FormattableString>()
+                    {
+                        FormattableStringFactory.Create("CALL RefreshFeeds({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateFeeds({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateABCAnalysis({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateFeedsABCAnalysis({0})", store.Id)
+                    };
+
+                foreach (var fs in formattableStrings)
+                    await _context.Database.ExecuteSqlAsync(fs);
+            }
 
             _stopwatch.Stop();
 
