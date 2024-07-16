@@ -464,6 +464,9 @@ namespace Ecom.API.Services
             var messageOrders = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка заказов",
                 parseMode: ParseMode.Markdown);
 
+            messageOrders.Add(messageOrders.MessageId, new List<string>());
+
+
             globalStopwatch.Start();
 
             foreach (var store in stores)
