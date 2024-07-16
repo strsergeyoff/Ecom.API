@@ -983,6 +983,10 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadUnits(int? id = null)
         {
+
+            var tasks = new List<Task>();
+            var semaphoreSlim = new SemaphoreSlim(10, 10);
+
             var stores = id is null ? _context.rise_projects.Where(x => x.Id == 39)
                 .Where(x => !string.IsNullOrWhiteSpace(x.Token)
                 && x.Token.Length > 155
@@ -996,89 +1000,97 @@ namespace Ecom.API.Services
 
 
             int unitsCount = 0;
-            int _stores = 0;
-            int error = 0;
+            int storesCount = 0;
+            int errors = 0;
             var messageUnits = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка юнит",
                 parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
             MessageUnits.Add(messageUnits.MessageId, new List<string>());
+
+            Dictionary<int, List<rise_unit>> keyValuePairs = new Dictionary<int, List<rise_unit>>();
+
+            foreach (var store in stores)
+                keyValuePairs.Add(store.Id, await _context.rise_units.Where(x => x.ProjectId == store.Id).ToListAsync());
 
             Stopwatch _stopwatch = new Stopwatch();
             _stopwatch.Start();
 
             foreach (var store in stores)
             {
-                _stores++;
-                try
+
+                await semaphoreSlim.WaitAsync();
+
+                tasks.Add(Task.Run(async () =>
                 {
-                    Stopwatch stopwatch = new Stopwatch();
-                    stopwatch.Start();
+                    storesCount++;
+                    await semaphoreSlim.WaitAsync();
 
-                    var _units = _context.rise_units.ToList();
-
-                    var units = await FetchUnitFromApi(store);
-
-                    int UpdateRowUnits = 0;
-
-                    foreach (var unit in _units)
+                    try
                     {
-                        var _unit = units.FirstOrDefault(x => x.NmID == unit.NmID);
+                        Stopwatch stopwatch = new Stopwatch();
+                        stopwatch.Start();
 
-                        if (_unit is not null)
+                        var units = await FetchUnitFromApi(store);
+
+                        int UpdateRowUnits = 0;
+
+                        foreach (var unit in keyValuePairs[store.Id])
                         {
-                            UpdateRowUnits++;
-                            unit.Url = _unit.Url;
-                            unit.Ordered_today = _unit.Ordered_today;
-                            unit.Promotion_name = _unit.Promotion_name;
-                            unit.AvgCommissionPercent = _unit.AvgCommissionPercent;
-                            unit.AvgDeliveryRub = _unit.AvgDeliveryRub;
-                            unit.IsCommissionRecorded = _unit.IsCommissionRecorded;
-                            unit.IsLogisticsRecorded = _unit.IsLogisticsRecorded;
-                            unit.Discount = _unit.Discount;
-                            unit.PriceBeforeDiscount = _unit.PriceBeforeDiscount;
-                            unit.PriceAfterDiscount = _unit.PriceAfterDiscount;
+                            var _unit = units.FirstOrDefault(x => x.NmID == unit.NmID);
+
+                            if (_unit is not null)
+                            {
+                                UpdateRowUnits++;
+                                unit.Url = _unit.Url;
+                                unit.Ordered_today = _unit.Ordered_today;
+                                unit.Promotion_name = _unit.Promotion_name;
+                                unit.AvgCommissionPercent = _unit.AvgCommissionPercent;
+                                unit.AvgDeliveryRub = _unit.AvgDeliveryRub;
+                                unit.IsCommissionRecorded = _unit.IsCommissionRecorded;
+                                unit.IsLogisticsRecorded = _unit.IsLogisticsRecorded;
+                                unit.Discount = _unit.Discount;
+                                unit.PriceBeforeDiscount = _unit.PriceBeforeDiscount;
+                                unit.PriceAfterDiscount = _unit.PriceAfterDiscount;
+                            }
+
                         }
 
-                    }
-                    await _context.SaveChangesAsync();
+                        var uniqueUnits = new List<rise_unit>();
 
-                    var uniqueUnits = new List<rise_unit>();
+                        foreach (var unit in units)
+                        {
+                            var _unit = keyValuePairs[store.Id].FirstOrDefault(x => x.NmID == unit.NmID);
 
-                    foreach (var unit in units)
-                    {
-                        var _unit = _units.FirstOrDefault(x => x.NmID == unit.NmID);
+                            if (_unit is not null)
+                                continue;
+                            else
+                                uniqueUnits.Add(unit);
+                        }
+                        if (uniqueUnits.Count > 0)
+                            await BulkLoader("rise_units", uniqueUnits);
 
-                        if (_unit is not null)
-                            continue;
-                        else
-                            uniqueUnits.Add(unit);
-                    }
-                    if (uniqueUnits.Count > 0)
-                    {
-                        await _context.rise_units.AddRangeAsync(uniqueUnits);
-                        unitsCount += await _context.SaveChangesAsync();
-                    }
+                        stopwatch.Stop();
+                        TimeSpan elapsed = stopwatch.Elapsed;
 
-                    stopwatch.Stop();
-
-                    TimeSpan elapsed = stopwatch.Elapsed;
-                    int hours = elapsed.Hours;
-                    int minutes = elapsed.Minutes;
-                    int seconds = elapsed.Seconds;
-
-                    await InsertAndEditMessage(messageUnits, MessageUnits, @$"🏦 Магазин `{store.Title}`
-🔄 Обновлено строк `{UpdateRowUnits} шт.`
+                        MessageUnits[messageUnits.MessageId].Add(@$"🏦 Магазин `{store.Title}`
 🆕 Загружено строк `{uniqueUnits.Count} шт.`
-⏱️ Время загрузки юнит `{hours} ч {minutes} м. {seconds} с.`");
-                }
-                catch (Exception ex)
-                {
-                    error++;
-
-                    await InsertAndEditMessage(messageUnits, MessageUnits, @$"🏦 Магазин `{store.Title}`
-" + ex.Message.ToString());
-                }
+⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
+                    }
+                    catch (Exception ex)
+                    {
+                        errors++;
+                        MessageUnits[messageUnits.MessageId].Add(@$"🏦 Магазин `{store.Title}`
+`{ex.Message.ToString()}`");
+                    }
+                    finally
+                    {
+                        semaphoreSlim.Release();
+                    }
+                }));
             }
+
+            await Task.WhenAll(tasks);
+            await _context.SaveChangesAsync();
 
             _stopwatch.Stop();
 
@@ -1087,7 +1099,7 @@ namespace Ecom.API.Services
             int _minutes = _elapsed.Minutes;
             int _seconds = _elapsed.Seconds;
 
-            await InsertAndEditMessage(messageUnits, MessageUnits, $@"✅ Успешно: `{_stores - error} из {_stores}`
+            await InsertAndEditMessage(messageUnits, MessageUnits, $@"✅ Успешно: `{storesCount - errors} из {storesCount}`
 🆕 Загружено строк `{unitsCount} шт.`
 ⏱️ Потраченное время: `{_hours} ч {_minutes} м. {_seconds} с.`");
 
