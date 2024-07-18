@@ -54,56 +54,6 @@
             (Status == 9 ? "Идут показы" : "Кампания на паузе");
 
         /// <summary>
-        /// Показы
-        /// </summary>
-        public int? Views => AdvertsStatistics.Sum(x => x.Views);
-
-        /// <summary>
-        /// Клики
-        /// </summary>
-        public int? Clicks => AdvertsStatistics.Sum(x => x.Clicks);
-
-        /// <summary>
-        /// Показатель кликабельности, отношение числа кликов к количеству показов, %
-        /// </summary>
-        public double? Ctr => AdvertsStatistics.Sum(x => x.Clicks).Value == 0 || AdvertsStatistics.Sum(x => x.Views).Value == 0 ? 0 : ((double)AdvertsStatistics.Sum(x => x.Clicks).Value / (double)AdvertsStatistics.Sum(x => x.Views).Value) * 100;
-
-        /// <summary>
-        /// Средняя стоимость клика, ₽
-        /// </summary>
-        public double? Cpc => AdvertsStatistics.Average(x => x.Cpc);
-
-        /// <summary>
-        /// Затраты, ₽
-        /// </summary>
-        public double? Sum => AdvertsStatistics.Sum(x => x.Sum);
-
-        /// <summary>
-        /// Количество добавлений товаров в корзину
-        /// </summary>
-        public int? Atbs => AdvertsStatistics.Sum(x => x.Atbs);
-
-        /// <summary>
-        /// Количество заказов
-        /// </summary>
-        public int? Orders => AdvertsStatistics.Sum(x => x.Orders);
-
-        /// <summary>
-        /// CR(conversion rate) — отношение количества заказов к общему количеству посещений кампании
-        /// </summary>
-        public double? Cr => AdvertsStatistics.Sum(x => x.Orders).Value == 0 || AdvertsStatistics.Sum(x => x.Clicks).Value == 0 ? 0 : ((double)AdvertsStatistics.Sum(x => x.Orders).Value / (double)AdvertsStatistics.Sum(x => x.Clicks).Value) * 100;
-
-        /// <summary>
-        /// Количество заказанных товаров, шт
-        /// </summary>
-        public int? Shks => AdvertsStatistics.Sum(x => x.Shks);
-
-        /// <summary>
-        /// Заказов на сумму, ₽
-        /// </summary>
-        public double? Sum_price => AdvertsStatistics.Sum(x => x.Sum_price);
-
-        /// <summary>
         /// Статистика рекламной кампании по дням
         /// </summary>
         public virtual List<rise_advertstatistic> AdvertsStatistics { get; set; }
@@ -112,5 +62,48 @@
         /// Магазин
         /// </summary>
         public int ProjectId { get; set; }
+
+        #region Не нужные свойства
+
+        ///// <summary>
+        ///// Показатель кликабельности, отношение числа кликов к количеству показов, %
+        ///// </summary>
+        //public double? Ctr => AdvertsStatistics.Sum(x => x.Clicks).Value == 0 || AdvertsStatistics.Sum(x => x.Views).Value == 0 ? 0 : ((double)AdvertsStatistics.Sum(x => x.Clicks).Value / (double)AdvertsStatistics.Sum(x => x.Views).Value) * 100;
+
+        ///// <summary>
+        ///// Средняя стоимость клика, ₽
+        ///// </summary>
+        //public decimal? Cpc => AdvertsStatistics.Average(x => x.Cpc);
+
+        ///// <summary>
+        ///// Затраты, ₽
+        ///// </summary>
+        //public decimal? Sum => AdvertsStatistics.Sum(x => x.Sum);
+
+        ///// <summary>
+        ///// Количество добавлений товаров в корзину
+        ///// </summary>
+        //public int? Atbs => AdvertsStatistics.Sum(x => x.Atbs);
+
+        ///// <summary>
+        ///// Количество заказов
+        ///// </summary>
+        //public int? Orders => AdvertsStatistics.Sum(x => x.Orders);
+
+        ///// <summary>
+        ///// CR(conversion rate) — отношение количества заказов к общему количеству посещений кампании
+        ///// </summary>
+        //public double? Cr => AdvertsStatistics.Sum(x => x.Orders).Value == 0 || AdvertsStatistics.Sum(x => x.Clicks).Value == 0 ? 0 : ((double)AdvertsStatistics.Sum(x => x.Orders).Value / (double)AdvertsStatistics.Sum(x => x.Clicks).Value) * 100;
+
+        ///// <summary>
+        ///// Количество заказанных товаров, шт
+        ///// </summary>
+        //public int? Shks => AdvertsStatistics.Sum(x => x.Shks);
+
+        ///// <summary>
+        ///// Заказов на сумму, ₽
+        ///// </summary>
+        //public decimal? Sum_price => AdvertsStatistics.Sum(x => x.Sum_price);
+        #endregion
     }
 }

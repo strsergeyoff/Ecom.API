@@ -8,7 +8,7 @@ public class ApplicationDbContext : DbContext
     {
     }
 
-    public DbSet<ReportDetail> ReportDetails { get; set; }
+    public DbSet<rise_ReportDetail> rise_ReportDetails { get; set; }
     public DbSet<Stock> Stocks { get; set; }
     public DbSet<Sale> Sales { get; set; }
     public DbSet<rise_order> rise_orders { get; set; }

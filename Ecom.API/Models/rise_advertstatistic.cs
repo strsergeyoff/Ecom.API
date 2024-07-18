@@ -43,17 +43,17 @@
         /// <summary>
         /// Показатель кликабельности, отношение числа кликов к количеству показов, %
         /// </summary>
-        public double? Ctr { get; set; }
+        public decimal? Ctr { get; set; }
 
         /// <summary>
         /// Средняя стоимость клика, ₽
         /// </summary>
-        public double? Cpc { get; set; }
+        public decimal? Cpc { get; set; }
 
         /// <summary>
         /// Затраты, ₽
         /// </summary>
-        public double? Sum { get; set; }
+        public decimal? Sum { get; set; }
 
         /// <summary>
         /// Количество добавлений товаров в корзину
@@ -68,7 +68,7 @@
         /// <summary>
         /// CR(conversion rate) — отношение количества заказов к общему количеству посещений кампании
         /// </summary>
-        public double? Cr { get; set; }
+        public decimal? Cr { get; set; }
 
         /// <summary>
         /// Количество заказанных товаров, шт
@@ -78,7 +78,7 @@
         /// <summary>
         /// Заказов на сумму, ₽
         /// </summary>
-        public double? Sum_price { get; set; }
+        public decimal? Sum_price { get; set; }
 
         /// <summary>
         /// Рекламная кампания

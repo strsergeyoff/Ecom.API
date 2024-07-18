@@ -1,16 +1,17 @@
+using Ecom.API.Contracts;
 using Ecom.API.Jobs;
 using Ecom.API.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Quartz;
+using Swashbuckle.AspNetCore.Filters;
+using System.Reflection;
 using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -20,9 +21,26 @@ builder.Services.AddHttpClient();
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
        options.UseMySQL(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+
+
 builder.Services.AddSwaggerGen(option =>
 {
-    option.SwaggerDoc("v1", new OpenApiInfo { Title = "Demo API", Version = "v1" });
+    option.SwaggerDoc("v1", 
+        new OpenApiInfo { 
+            Title = "Ecommetriya API", 
+            Version = "v1",
+            Description = "Методы для работы с API wildberries и внутренним API Ecommetriya"
+        });
+
+    option.EnableAnnotations();
+
+    option.OperationFilter<AddResponseExamples>();
+
+    var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    option.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFilename));
+
+    
+
     //option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     //{
     //    In = ParameterLocation.Header,
@@ -32,6 +50,7 @@ builder.Services.AddSwaggerGen(option =>
     //    BearerFormat = "JWT",
     //    Scheme = "Bearer"
     //});
+
     option.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -47,6 +66,7 @@ builder.Services.AddSwaggerGen(option =>
         }
     });
 });
+
 
 builder.Services.AddQuartz(q =>
 {
@@ -84,30 +104,14 @@ builder.Services.AddQuartz(q =>
     //);
     //#endregion
 
-    //#region Заказы
+    #region Заказы
 
-    //var jobKeyLoadOrders = new JobKey("LoadOrders");
-    //q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));
-
-    //q.AddTrigger(opts => opts
-    //.ForJob(jobKeyLoadOrders)
-    //.WithIdentity($"{jobKeyLoadOrders}-trigger")
-    //.StartNow()
-    //.WithSimpleSchedule(x => x
-    //.WithIntervalInMinutes(30)
-    //.RepeatForever()
-    //.Build())
-    //);
-    //#endregion
-
-    #region Юнит
-
-    var jobKeyLoadUnits = new JobKey("LoadUnits");
-    q.AddJob<LoadUnits>(opts => opts.WithIdentity(jobKeyLoadUnits));
+    var jobKeyLoadOrders = new JobKey("LoadOrders");
+    q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));
 
     q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadUnits)
-    .WithIdentity($"{jobKeyLoadUnits}-trigger")
+    .ForJob(jobKeyLoadOrders)
+    .WithIdentity($"{jobKeyLoadOrders}-trigger")
     .StartNow()
     .WithSimpleSchedule(x => x
     .WithIntervalInMinutes(30)
@@ -115,6 +119,22 @@ builder.Services.AddQuartz(q =>
     .Build())
     );
     #endregion
+
+    //#region Юнит
+
+    //var jobKeyLoadUnits = new JobKey("LoadUnits");
+    //q.AddJob<LoadUnits>(opts => opts.WithIdentity(jobKeyLoadUnits));
+
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadUnits)
+    //.WithIdentity($"{jobKeyLoadUnits}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(30)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
     //  #region Рекламные кампании
     //  var jobKeyLoadAdverts = new JobKey("LoadAdverts");
@@ -130,25 +150,25 @@ builder.Services.AddQuartz(q =>
     //  );
     //  #endregion
 
-    // #region Карточки
+    //  #region Карточки
 
-    // var jobKeyLoadCardsWildberries = new JobKey("LoadCardsWildberries");
-    // q.AddJob<LoadCards>(opts => opts.WithIdentity(jobKeyLoadCardsWildberries));
+    //  var jobKeyLoadCardsWildberries = new JobKey("LoadCardsWildberries");
+    //  q.AddJob<LoadCards>(opts => opts.WithIdentity(jobKeyLoadCardsWildberries));
 
-    // q.AddTrigger(opts => opts
-    //.ForJob(jobKeyLoadCardsWildberries)
-    //.WithIdentity($"{jobKeyLoadCardsWildberries}-trigger-now")
-    //.StartNow()
-    //.WithSimpleSchedule(x => x.Build())
-    //);
-
-    // q.AddTrigger(opts => opts
+    //  q.AddTrigger(opts => opts
     // .ForJob(jobKeyLoadCardsWildberries)
-    // .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger")
-    // .WithCronSchedule("0 1 0 * * ?")
+    // .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger-now")
     // .StartNow()
-    //  );
-    // #endregion
+    // .WithSimpleSchedule(x => x.Build())
+    // );
+
+    //  q.AddTrigger(opts => opts
+    //  .ForJob(jobKeyLoadCardsWildberries)
+    //  .WithIdentity($"{jobKeyLoadCardsWildberries}-trigger")
+    //  .WithCronSchedule("0 1 0 * * ?")
+    //  .StartNow()
+    //   );
+    //  #endregion
 
     //  #region Конкуренты
 

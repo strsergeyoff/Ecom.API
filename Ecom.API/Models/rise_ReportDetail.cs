@@ -3,7 +3,7 @@
     /// <summary>
     /// Подробный отчет
     /// </summary>
-    public class ReportDetail
+    public class rise_ReportDetail
     {
         /// <summary>
         /// Индификатор отчета
