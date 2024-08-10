@@ -517,7 +517,7 @@ namespace Ecom.API.Services
                 Stopwatch privateStopwatch = new Stopwatch();
 
                 var tasks = new List<Task>();
-                var semaphoreSlim = new SemaphoreSlim(10);
+                var semaphoreSlim = new SemaphoreSlim(5);
 
 
                 var stores = id is null ? _context.rise_projects
@@ -732,7 +732,7 @@ namespace Ecom.API.Services
             try
             {
                 var tasks = new List<Task>();
-            var semaphoreSlim = new SemaphoreSlim(10);
+            var semaphoreSlim = new SemaphoreSlim(5);
 
             int storeCount = 0;
             int errors = 0;
