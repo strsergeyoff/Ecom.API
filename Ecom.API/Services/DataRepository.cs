@@ -766,77 +766,73 @@ namespace Ecom.API.Services
 
             foreach (var store in stores)
             {
+                    storeCount++;
 
-//                tasks.Add(Task.Run(async () =>
-//                {
-//                    storeCount++;
-//                    await semaphoreSlim.WaitAsync();
+                    tasks.Add(Task.Run(async () =>
+                    {
+                        await semaphoreSlim.WaitAsync();
 
-//                    try
-//                    {
-//                        Stopwatch stopwatch = new Stopwatch();
-//                        stopwatch.Start();
+                        try
+                        {
+                            Stopwatch stopwatch = new Stopwatch();
+                            stopwatch.Start();
 
-//                        var reportDetails = await FetchReportDetailsFromApi(store, directory[store.Id]);
+                            var reportDetails = await FetchReportDetailsFromApi(store, directory[store.Id]);
 
-//                        newRows += reportDetails.reportDetails.Count;
+                            newRows += reportDetails.reportDetails.Count;
 
-//                        if (reportDetails.reportDetails.Count > 0)
-//                            ArrayReportDetails.AddRange(reportDetails.reportDetails);
+                            if (reportDetails.reportDetails.Count > 0)
+                                ArrayReportDetails.AddRange(reportDetails.reportDetails);
 
-//                        stopwatch.Stop();
-
-
-
-//                        TimeSpan elapsed = stopwatch.Elapsed;
-
-//                        MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 `{store.Id}` Магазин `{store.Title}`
-//🆕 Загружено строк `{reportDetails.reportDetails.Count} шт.`
-//⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-
-//                        if (reportDetails.error is not null)
-//                        {
-//                            errors++;
-//                            MessageReportDetails[messageReportDetails.MessageId].Add(@$"```{reportDetails.error}```");
-//                        }
-//                    }
-//                    catch (Exception ex)
-//                    {
-//                        errors++;
-//                        MessageReportDetails[messageReportDetails.MessageId].Add(@$"```{ex.Message.ToString()}```");
-//                    }
-//                    finally
-//                    {
-//                        semaphoreSlim.Release();
-//                    }
-//                }));
-            }
-
-                //await Task.WhenAll(tasks);
+                            stopwatch.Stop();
 
 
 
+                            TimeSpan elapsed = stopwatch.Elapsed;
 
-                //if (ArrayReportDetails.Count > 0)
-                //    await BulkInsertEntitiesAsync("rise_ReportDetails", entities: ArrayReportDetails);
+                            lock (MessageReportDetails)
+                            {
+                                MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 `{store.Id}` Магазин `{store.Title}`
+🆕 Загружено строк `{reportDetails.reportDetails.Count} шт.`
+⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
+                            }
 
-                //foreach (var store in stores)
-                //{
-                //    List<FormattableString> formattableStrings = new List<FormattableString>()
-                //    {
-                //        FormattableStringFactory.Create("CALL RefreshFeeds({0})", store.Id),
-                //        FormattableStringFactory.Create("CALL UpdateFeeds({0})", store.Id),
-                //        FormattableStringFactory.Create("CALL UpdateABCAnalysis({0})", store.Id),
-                //        FormattableStringFactory.Create("CALL UpdateFeedsABCAnalysis({0})", store.Id)
-                //    };
+                            if (reportDetails.error is not null)
+                            {
+                                errors++;
+                                MessageReportDetails[messageReportDetails.MessageId].Add(@$"```{reportDetails.error}```");
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            errors++;
+                            MessageReportDetails[messageReportDetails.MessageId].Add(@$"```{ex.Message.ToString()}```");
+                        }
+                        finally
+                        {
+                            semaphoreSlim.Release();
+                        }
+                    }));
+                }
 
-                //    foreach (var fs in formattableStrings)
-                //        await _context.Database.ExecuteSqlAsync(fs);
-                //}
+                await Task.WhenAll(tasks);
 
+                if (ArrayReportDetails.Count > 0)
+                    await BulkInsertEntitiesAsync("rise_ReportDetails", entities: ArrayReportDetails);
 
+                foreach (var store in stores)
+                {
+                    List<FormattableString> formattableStrings = new List<FormattableString>()
+                    {
+                        FormattableStringFactory.Create("CALL RefreshFeeds({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateFeeds({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateABCAnalysis({0})", store.Id),
+                        FormattableStringFactory.Create("CALL UpdateFeedsABCAnalysis({0})", store.Id)
+                    };
 
-
+                    foreach (var fs in formattableStrings)
+                        await _context.Database.ExecuteSqlAsync(fs);
+                }
                 _stopwatch.Stop();
 
                 TimeSpan _elapsed = _stopwatch.Elapsed;
