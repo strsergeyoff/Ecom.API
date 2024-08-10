@@ -1053,7 +1053,6 @@ namespace Ecom.API.Services
 
             return reportDetails;
         }
-        #endregion
 
         public static DateTime GetMonday(DateTime date)
         {
