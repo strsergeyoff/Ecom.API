@@ -729,7 +729,9 @@ namespace Ecom.API.Services
         /// <returns></returns>
         public async Task LoadReportDetails(int? id = null)
         {
-            var tasks = new List<Task>();
+            try
+            {
+                var tasks = new List<Task>();
             var semaphoreSlim = new SemaphoreSlim(10);
 
             int storeCount = 0;
@@ -814,8 +816,7 @@ namespace Ecom.API.Services
 
            
 
-            try
-            {
+           
                 //if (ArrayReportDetails.Count > 0)
                 //    await BulkInsertEntitiesAsync("rise_ReportDetails", entities: ArrayReportDetails);
 
@@ -832,10 +833,7 @@ namespace Ecom.API.Services
                 //    foreach (var fs in formattableStrings)
                 //        await _context.Database.ExecuteSqlAsync(fs);
                 //}
-            }
-            catch (Exception ex)
-            {
-            }
+            
 
             
 
@@ -847,6 +845,12 @@ namespace Ecom.API.Services
 ⏱️ Потраченное время: `{_elapsed.Hours} ч {_elapsed.Minutes} м. {_elapsed.Seconds} с.`");
 
             MessageReportDetails.Clear();
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message.ToString());
+            }
         }
 
 
