@@ -774,32 +774,32 @@ namespace Ecom.API.Services
 
                         try
                         {
-//                            Stopwatch stopwatch = new Stopwatch();
-//                            stopwatch.Start();
+                            //                            Stopwatch stopwatch = new Stopwatch();
+                            //                            stopwatch.Start();
 
-//                            var reportDetails = await FetchReportDetailsFromApi(store, directory[store.Id]);
+                            var reportDetails = await FetchReportDetailsFromApi(store, directory[store.Id]);
 
-//                            newRows += reportDetails.reportDetails.Count;
+                            newRows += reportDetails.reportDetails.Count;
 
-//                            if (reportDetails.reportDetails.Count > 0)
-//                                ArrayReportDetails.AddRange(reportDetails.reportDetails);
+                            //                            if (reportDetails.reportDetails.Count > 0)
+                            //                                ArrayReportDetails.AddRange(reportDetails.reportDetails);
 
-//                            stopwatch.Stop();
+                            //                            stopwatch.Stop();
 
-//                            TimeSpan elapsed = stopwatch.Elapsed;
+                            //                            TimeSpan elapsed = stopwatch.Elapsed;
 
-//                            lock (MessageReportDetails)
-//                            {
-//                                MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 `{store.Id}` Магазин `{store.Title}`
-//🆕 Загружено строк `{reportDetails.reportDetails.Count} шт.`
-//⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-//                            }
+                            //                            lock (MessageReportDetails)
+                            //                            {
+                            //                                MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 `{store.Id}` Магазин `{store.Title}`
+                            //🆕 Загружено строк `{reportDetails.reportDetails.Count} шт.`
+                            //⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
+                            //                            }
 
-//                            if (reportDetails.error is not null)
-//                            {
-//                                errors++;
-//                                MessageReportDetails[messageReportDetails.MessageId].Add(@$"```{reportDetails.error}```");
-//                            }
+                            //                            if (reportDetails.error is not null)
+                            //                            {
+                            //                                errors++;
+                            //                                MessageReportDetails[messageReportDetails.MessageId].Add(@$"```{reportDetails.error}```");
+                            //                            }
                         }
                         catch (Exception ex)
                         {
