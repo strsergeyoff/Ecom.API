@@ -732,40 +732,40 @@ namespace Ecom.API.Services
             try
             {
                 var tasks = new List<Task>();
-            var semaphoreSlim = new SemaphoreSlim(5);
+                var semaphoreSlim = new SemaphoreSlim(5);
 
-            int storeCount = 0;
-            int errors = 0;
-            int newRows = 0;
+                int storeCount = 0;
+                int errors = 0;
+                int newRows = 0;
 
-            var stores = id is null ? _context.rise_projects
-                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
-                && x.Token.Length > 155
-                && x.Deleted.Value == false)
-                .ToList() :
-                _context.rise_projects.Where(x => x.Id == id)
-                .Where(x => !string.IsNullOrWhiteSpace(x.Token)
-                && x.Token.Length > 155
-                && x.Deleted.Value == false)
-                .ToList();
+                var stores = id is null ? _context.rise_projects
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                    && x.Token.Length > 155
+                    && x.Deleted.Value == false)
+                    .ToList() :
+                    _context.rise_projects.Where(x => x.Id == id)
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Token)
+                    && x.Token.Length > 155
+                    && x.Deleted.Value == false)
+                    .ToList();
 
-            var messageReportDetails = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов",
-                parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
+                var messageReportDetails = await _telegramBot.SendTextMessageAsync("740755376", "Загрузка отчетов",
+                    parseMode: Telegram.Bot.Types.Enums.ParseMode.Markdown);
 
-            MessageReportDetails.Add(messageReportDetails.MessageId, new List<string>());
+                MessageReportDetails.Add(messageReportDetails.MessageId, new List<string>());
 
-            Dictionary<int, DateTime?> directory = new Dictionary<int, DateTime?>();
-            List<rise_ReportDetail> ArrayReportDetails = new List<rise_ReportDetail>();
+                Dictionary<int, DateTime?> directory = new Dictionary<int, DateTime?>();
+                List<rise_ReportDetail> ArrayReportDetails = new List<rise_ReportDetail>();
 
-            foreach (var store in stores)
-                directory.Add(store.Id, await _context.rise_ReportDetails.Where(x => x.ProjectId == store.Id).MaxAsync(x => x.Create_dt));
+                foreach (var store in stores)
+                    directory.Add(store.Id, await _context.rise_ReportDetails.Where(x => x.ProjectId == store.Id).MaxAsync(x => x.Create_dt));
 
-            Stopwatch _stopwatch = new Stopwatch();
-            _stopwatch.Start();
+                Stopwatch _stopwatch = new Stopwatch();
+                _stopwatch.Start();
 
 
-            foreach (var store in stores)
-            {
+                foreach (var store in stores)
+                {
                     storeCount++;
 
                     tasks.Add(Task.Run(async () =>
@@ -779,10 +779,10 @@ namespace Ecom.API.Services
 
                             var reportDetails = await FetchReportDetailsFromApi(store, directory[store.Id]);
 
-                            newRows += reportDetails.reportDetails.Count;
+                            newRows += reportDetails.Count;
 
-                            if (reportDetails.reportDetails.Count > 0)
-                                ArrayReportDetails.AddRange(reportDetails.reportDetails);
+                            if (reportDetails.Count > 0)
+                                ArrayReportDetails.AddRange(reportDetails);
 
                             stopwatch.Stop();
 
@@ -791,14 +791,8 @@ namespace Ecom.API.Services
                             lock (MessageReportDetails)
                             {
                                 MessageReportDetails[messageReportDetails.MessageId].Add(@$"🏦 `{store.Id}` Магазин `{store.Title}`
-                            🆕 Загружено строк `{reportDetails.reportDetails.Count} шт.`
+                            🆕 Загружено строк `{reportDetails.Count} шт.`
                             ⏱️ Время загрузки отчета `{elapsed.Hours} ч {elapsed.Minutes} м. {elapsed.Seconds} с.`");
-                            }
-
-                            if (reportDetails.error is not null)
-                            {
-                                errors++;
-                                MessageReportDetails[messageReportDetails.MessageId].Add(@$"```{reportDetails.error}```");
                             }
                         }
                         catch (Exception ex)
@@ -937,95 +931,129 @@ namespace Ecom.API.Services
         /// <param name="store">Магазин</param>
         /// <param name="lastDate">Последняя дата обновления</param>
         /// <returns></returns>
-        public async Task<(List<rise_ReportDetail> reportDetails, string? error)> FetchReportDetailsFromApi(rise_project store, DateTime? lastDate)
+        //public async Task<(List<rise_ReportDetail> reportDetails, string? error)> FetchReportDetailsFromApi(rise_project store, DateTime? lastDate)
+        //{
+        //    var reportDetails = new List<rise_ReportDetail>();
+
+        //    string dateFrom = lastDate.HasValue ? lastDate.Value.AddDays(1).ToString("yyyy-MM-dd") : "2024-01-29";
+        //    string rrdid = "0";
+        //    string dateTo = DateTime.Now.Date.ToString("yyyy-MM-dd");
+
+
+        //    bool fetchMore = true;
+
+        //    while (fetchMore)
+        //    {
+        //        try
+        //        {
+        //            string apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod?dateFrom={dateFrom}&rrdid={rrdid}&dateTo={dateTo}";
+
+        //            using (var httpClient = new HttpClient())
+        //            {
+        //                var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+        //                requestMessage.Headers.Add("contentType", "application/json");
+        //                requestMessage.Headers.Add("Authorization", store.Token);
+
+        //                HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
+
+        //                if (response.IsSuccessStatusCode)
+        //                {
+        //                    string responseContent = await response.Content.ReadAsStringAsync();
+        //                    var fetchedReportDetails = JsonConvert.DeserializeObject<List<rise_ReportDetail>>(responseContent) ?? new List<rise_ReportDetail>();
+
+        //                    foreach (var reportDetail in fetchedReportDetails)
+        //                        reportDetail.ProjectId = store.Id;
+
+        //                    if (fetchedReportDetails is not null && fetchedReportDetails.Count > 0)
+        //                        reportDetails.AddRange(fetchedReportDetails);
+
+        //                    if (fetchedReportDetails is not null && fetchedReportDetails.Count > 0)
+        //                    {
+        //                        DateTime? lastReportDetail = fetchedReportDetails?.Max(x => x.Create_dt);
+
+        //                        if (lastReportDetail != GetMonday(DateTime.Today.Date).Date)
+        //                        {
+        //                            dateFrom = lastReportDetail?.ToString("yyyy-MM-dd");
+        //                            rrdid = fetchedReportDetails?.LastOrDefault()?.Rrd_id.ToString();
+
+        //                            if (lastDate is null)
+        //                                await Task.Delay(TimeSpan.FromMinutes(1));
+        //                        }
+        //                        else
+        //                            fetchMore = false;
+        //                    }
+        //                    else
+        //                        fetchMore = false;
+
+        //                }
+        //                else
+        //                {
+        //                    fetchMore = false;
+        //                    string errorMessage = await response.Content.ReadAsStringAsync();
+        //                    return (reportDetails,
+        //                        @$"status = {(int)response.StatusCode}
+        //                       error = {errorMessage}");
+        //                }
+        //            }
+
+        //        }
+        //        catch (HttpRequestException ex)
+        //        {
+        //            // Обработка ошибок связанных с HTTP-запросом
+        //            return (reportDetails,
+        //                    @$"error = {ex.Message}");
+        //        }
+        //        catch (System.Text.Json.JsonException ex)
+        //        {
+        //            // Обработка ошибок десериализации JSON
+        //            return (reportDetails,
+        //                     @$"error = {ex.Message}");
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            // Другие специфические исключения
+        //            return (reportDetails,
+        //                    @$"error = {ex.Message}");
+        //        }
+
+        //    }
+
+        //    return (reportDetails, null);
+        //}
+
+        private async Task<List<rise_ReportDetail>> FetchReportDetailsFromApi(rise_project store, DateTime? lastDate)
         {
-            var reportDetails = new List<rise_ReportDetail>();
+            string date = lastDate is null ? $"?dateFrom=2024-01-29&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}" : $"?dateFrom={lastDate.Value.AddDays(1).ToString("yyyy-MM-dd")}&rrdid=0&dateTo={DateTime.Now.Date.ToString("yyyy-MM-dd")}";
+            List<rise_ReportDetail> reportDetails = new List<rise_ReportDetail>();
 
-            string dateFrom = lastDate.HasValue ? lastDate.Value.AddDays(1).ToString("yyyy-MM-dd") : "2024-01-29";
-            string rrdid = "0";
-            string dateTo = DateTime.Now.Date.ToString("yyyy-MM-dd");
+            var apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod{date}";
 
-
-            bool fetchMore = true;
-
-            while (fetchMore)
+            using (var httpClient = new HttpClient())
             {
-                try
+                var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
+                requestMessage.Headers.Add("contentType", "application/json");
+                requestMessage.Headers.Add("Authorization", store.Token);
+
+                HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
+
+                if (response.IsSuccessStatusCode)
                 {
-                    string apiUrl = $"https://statistics-api.wildberries.ru/api/v5/supplier/reportDetailByPeriod?dateFrom={dateFrom}&rrdid={rrdid}&dateTo={dateTo}";
+                    string responseContent = await response.Content.ReadAsStringAsync();
 
-                    using (var httpClient = new HttpClient())
-                    {
-                        var requestMessage = new HttpRequestMessage(HttpMethod.Get, apiUrl);
-                        requestMessage.Headers.Add("contentType", "application/json");
-                        requestMessage.Headers.Add("Authorization", store.Token);
+                    var list = JsonConvert.DeserializeObject<List<rise_ReportDetail>>(responseContent);
 
-                        HttpResponseMessage response = await httpClient.SendAsync(requestMessage);
+                    if (list is not null)
+                        reportDetails.AddRange(list);
 
-                        if (response.IsSuccessStatusCode)
-                        {
-                            string responseContent = await response.Content.ReadAsStringAsync();
-                            var fetchedReportDetails = JsonConvert.DeserializeObject<List<rise_ReportDetail>>(responseContent) ?? new List<rise_ReportDetail>();
-
-                            foreach (var reportDetail in fetchedReportDetails)
-                                reportDetail.ProjectId = store.Id;
-
-                            if (fetchedReportDetails is not null && fetchedReportDetails.Count > 0)
-                                reportDetails.AddRange(fetchedReportDetails);
-
-                            if (fetchedReportDetails is not null && fetchedReportDetails.Count > 0)
-                            {
-                                DateTime? lastReportDetail = fetchedReportDetails?.Max(x => x.Create_dt);
-
-                                if (lastReportDetail != GetMonday(DateTime.Today.Date).Date)
-                                {
-                                    dateFrom = lastReportDetail?.ToString("yyyy-MM-dd");
-                                    rrdid = fetchedReportDetails?.LastOrDefault()?.Rrd_id.ToString();
-
-                                    if (lastDate is null)
-                                        await Task.Delay(TimeSpan.FromMinutes(1));
-                                }
-                                else
-                                    fetchMore = false;
-                            }
-                            else
-                                fetchMore = false;
-
-                        }
-                        else
-                        {
-                            fetchMore = false;
-                            string errorMessage = await response.Content.ReadAsStringAsync();
-                            return (reportDetails,
-                                @$"status = {(int)response.StatusCode}
-                               error = {errorMessage}");
-                        }
-                    }
-                       
+                    foreach (var rd in reportDetails)
+                        rd.ProjectId = store.Id;
                 }
-                catch (HttpRequestException ex)
-                {
-                    // Обработка ошибок связанных с HTTP-запросом
-                    return (reportDetails,
-                            @$"error = {ex.Message}");
-                }
-                catch (System.Text.Json.JsonException ex)
-                {
-                    // Обработка ошибок десериализации JSON
-                    return (reportDetails,
-                             @$"error = {ex.Message}");
-                }
-                catch (Exception ex)
-                {
-                    // Другие специфические исключения
-                    return (reportDetails,
-                            @$"error = {ex.Message}");
-                }
-
             }
 
-            return (reportDetails, null);
+
+            return reportDetails;
         }
+        #endregion
 
         public static DateTime GetMonday(DateTime date)
         {
