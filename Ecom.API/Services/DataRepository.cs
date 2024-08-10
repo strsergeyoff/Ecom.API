@@ -819,19 +819,19 @@ namespace Ecom.API.Services
                 if (ArrayReportDetails.Count > 0)
                     await BulkInsertEntitiesAsync("rise_ReportDetails", entities: ArrayReportDetails);
 
-                foreach (var store in stores)
-                {
-                    List<FormattableString> formattableStrings = new List<FormattableString>()
-                    {
-                        FormattableStringFactory.Create("CALL RefreshFeeds({0})", store.Id),
-                        FormattableStringFactory.Create("CALL UpdateFeeds({0})", store.Id),
-                        FormattableStringFactory.Create("CALL UpdateABCAnalysis({0})", store.Id),
-                        FormattableStringFactory.Create("CALL UpdateFeedsABCAnalysis({0})", store.Id)
-                    };
+                //foreach (var store in stores)
+                //{
+                //    List<FormattableString> formattableStrings = new List<FormattableString>()
+                //    {
+                //        FormattableStringFactory.Create("CALL RefreshFeeds({0})", store.Id),
+                //        FormattableStringFactory.Create("CALL UpdateFeeds({0})", store.Id),
+                //        FormattableStringFactory.Create("CALL UpdateABCAnalysis({0})", store.Id),
+                //        FormattableStringFactory.Create("CALL UpdateFeedsABCAnalysis({0})", store.Id)
+                //    };
 
-                    foreach (var fs in formattableStrings)
-                        await _context.Database.ExecuteSqlAsync(fs);
-                }
+                //    foreach (var fs in formattableStrings)
+                //        await _context.Database.ExecuteSqlAsync(fs);
+                //}
             }
             catch (Exception ex)
             {
