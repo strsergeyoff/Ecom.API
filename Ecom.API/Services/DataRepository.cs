@@ -816,8 +816,8 @@ namespace Ecom.API.Services
 
             try
             {
-                if (ArrayReportDetails.Count > 0)
-                    await BulkInsertEntitiesAsync("rise_ReportDetails", entities: ArrayReportDetails);
+                //if (ArrayReportDetails.Count > 0)
+                //    await BulkInsertEntitiesAsync("rise_ReportDetails", entities: ArrayReportDetails);
 
                 //foreach (var store in stores)
                 //{
