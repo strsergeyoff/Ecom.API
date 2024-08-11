@@ -2,10 +2,16 @@ using Ecom.API.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Quartz;
+using System.Net;
 using System.Reflection;
 using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel((context, serverOptions) =>
+{
+    serverOptions.Listen(IPAddress.Loopback, 5066);
+});
 
 
 builder.Services.AddControllers();
