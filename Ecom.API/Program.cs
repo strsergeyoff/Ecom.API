@@ -8,11 +8,6 @@ using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.WebHost.ConfigureKestrel((context, serverOptions) =>
-{
-    serverOptions.Listen(IPAddress.Loopback, 5067);
-});
-
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
