@@ -1,10 +1,7 @@
-using Ecom.API.Contracts;
-using Ecom.API.Jobs;
 using Ecom.API.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Quartz;
-using Swashbuckle.AspNetCore.Filters;
 using System.Reflection;
 using Telegram.Bot;
 
@@ -20,7 +17,6 @@ builder.Services.AddHttpClient();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
        options.UseMySQL(builder.Configuration.GetConnectionString("DefaultConnection")));
-
 
 
 builder.Services.AddSwaggerGen(option =>
@@ -104,21 +100,21 @@ builder.Services.AddQuartz(q =>
     //);
     //#endregion
 
-    #region Заказы
+    //#region Заказы
 
-    var jobKeyLoadOrders = new JobKey("LoadOrders");
-    q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));
+    //var jobKeyLoadOrders = new JobKey("LoadOrders");
+    //q.AddJob<LoadOrders>(opts => opts.WithIdentity(jobKeyLoadOrders));
 
-    q.AddTrigger(opts => opts
-    .ForJob(jobKeyLoadOrders)
-    .WithIdentity($"{jobKeyLoadOrders}-trigger")
-    .StartNow()
-    .WithSimpleSchedule(x => x
-    .WithIntervalInMinutes(30)
-    .RepeatForever()
-    .Build())
-    );
-    #endregion
+    //q.AddTrigger(opts => opts
+    //.ForJob(jobKeyLoadOrders)
+    //.WithIdentity($"{jobKeyLoadOrders}-trigger")
+    //.StartNow()
+    //.WithSimpleSchedule(x => x
+    //.WithIntervalInMinutes(30)
+    //.RepeatForever()
+    //.Build())
+    //);
+    //#endregion
 
     //#region Юнит
 
@@ -198,7 +194,6 @@ builder.Services.AddScoped<IDataRepository, DataRepository>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
