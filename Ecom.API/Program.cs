@@ -10,7 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel((context, serverOptions) =>
 {
-    serverOptions.Listen(IPAddress.Loopback, 5066);
+    serverOptions.Listen(IPAddress.Loopback, 5067);
 });
 
 
