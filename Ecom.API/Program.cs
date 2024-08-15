@@ -1,5 +1,6 @@
 using Ecom.API.Jobs;
 using Ecom.API.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using Quartz;
@@ -7,6 +8,12 @@ using System.Reflection;
 using Telegram.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
 
 
 builder.Services.AddControllers();
@@ -194,6 +201,8 @@ builder.Services.AddScoped<IDataRepository, DataRepository>();
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -202,6 +211,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseAuthorization();
+app.UseAuthentication();
 
 app.MapControllers();
 
