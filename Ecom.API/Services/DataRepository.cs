@@ -21,7 +21,7 @@ namespace Ecom.API.Services
     {
         #region Поля и свойства
 
-        private readonly string ConnectionMySQL = "Server=31.31.196.247;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F;AllowLoadLocalInfile=true;Charset=utf8";
+        private readonly string ConnectionMySQL = "Server=93.183.104.188;Database=u2693092_default;Uid=u2693092_default;Pwd=V2o0oyRuG8DKLl7F;AllowLoadLocalInfile=true;Charset=utf8";
 
         private const string WbSmallImageUrlTemplate = "https://basket-#id#.wb.ru/vol#count4#/part#count6#/#article#/images/big/#number#.jpg";
 
